@@ -26,6 +26,11 @@ Findings of a full code review, all fixed:
 - Housekeeping: the key-creation hints cover Google's ten-keys-per-account
   limit, the key file is written with mode 600 from the first byte,
   "deleteing" fixed, dead code removed.
+- Releasing is now just pushing the version bump: a GitHub workflow tags
+  `v<version>` automatically when it lands on main — the tag the Cloud
+  Shell one-liner depends on. The one-liner itself now uses `curl -f` and
+  falls back to `main` should the tag ever be missing, instead of piping
+  a 404 page into bash.
 
 ## 0.4.0-beta — 2026-08-03
 

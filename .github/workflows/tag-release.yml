@@ -1,0 +1,33 @@
+# The Cloud Shell one-liner that `setup --guide` hands out points at the
+# raw URL of the git tag matching the installed VERSION — an immutable URL,
+# immune to raw.githubusercontent.com's per-URL caching. This workflow
+# creates that tag automatically whenever a version bump lands on main, so
+# releasing is just pushing the bump and nobody has to remember the tag.
+
+name: Tag release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Create the version tag if it does not exist yet
+        run: |
+          VERSION="$(python3 -c 'import json; print(json.load(open(".claude-plugin/plugin.json"))["version"])')"
+          TAG="v$VERSION"
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            echo "$TAG already exists — nothing to do."
+          else
+            git tag "$TAG"
+            git push origin "$TAG"
+            echo "Created $TAG."
+          fi

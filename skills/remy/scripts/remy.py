@@ -1673,11 +1673,16 @@ def cmd_setup_guide(args):
         # The tag URL, not main: raw.githubusercontent.com caches per URL
         # for minutes, so right after a release `main` can still serve the
         # previous script. A tag URL is immutable and always matches the
-        # version that is asking for it.
+        # version that is asking for it. CI pushes the tag automatically
+        # when a version bump lands on main (.github/workflows/
+        # tag-release.yml); should it ever be missing, -f makes curl fail
+        # cleanly and the one-liner falls back to main.
         "cloudshell_command":
-            f"bash <(curl -sL https://raw.githubusercontent.com/"
+            f"bash <(curl -fsL https://raw.githubusercontent.com/"
             f"dirkpaessler/remy/v{VERSION}/skills/remy/scripts/"
-            f"cloudshell-setup.sh)",
+            f"cloudshell-setup.sh || curl -fsL "
+            f"https://raw.githubusercontent.com/dirkpaessler/remy/main/"
+            f"skills/remy/scripts/cloudshell-setup.sh)",
         "then": "Run `remy.py import-key` — it finds the downloaded file, "
                 "verifies it against Google, and installs it.",
         "note": "Nothing is installed on the user's computer and nothing "
