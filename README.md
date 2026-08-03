@@ -25,7 +25,7 @@ This is what it looks like (Remy has corrected a typo):
 ![Remy's markup: the old wording struck through in pink, the new wording in mint](docs/img/markup-example.png)
 
 > Note: Google's APIs do not support native "suggestions" yet. It is in
-> beta — email dirk@dirkpaessler.com to become a beta tester.
+> beta — email remy@dirkpaessler.com to become a beta tester.
 
 ## Minimizes AI's blast-radius through a minimalistic security concept
 
