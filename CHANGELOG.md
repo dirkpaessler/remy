@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.2-beta — 2026-08-03
+
+- The daily update check downloads a tiny `version.json` from the latest
+  GitHub release instead of calling the tags API (which stays as a
+  fallback). GitHub's public download counter on that file doubles as an
+  anonymous tally of active installations — Remy sends nothing about the
+  user or their documents, and `REMY_NO_UPDATE_CHECK=1` still switches the
+  check off entirely. The tag workflow publishes the release and its asset
+  automatically.
+
 ## 0.4.1-beta — 2026-08-03
 
 Findings of a full code review, all fixed:

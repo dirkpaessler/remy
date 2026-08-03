@@ -188,7 +188,10 @@ still works. Never interrupt the actual task for it, and never update
 anything yourself.
 
 The check asks GitHub at most once a day, caches the answer, stays silent on
-any failure, and can be switched off with `REMY_NO_UPDATE_CHECK=1`.
+any failure, and can be switched off with `REMY_NO_UPDATE_CHECK=1`. It
+downloads a tiny `version.json` from the latest GitHub release; the public
+download counter on that file doubles as an anonymous count of active
+installations — nothing about the user or their documents is sent.
 
 ## Chat and Cowork
 

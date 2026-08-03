@@ -32,8 +32,13 @@ SCOPES = [
     "https://www.googleapis.com/auth/documents",
     "https://www.googleapis.com/auth/drive",
 ]
-VERSION = "0.4.1-beta"  # keep in step with .claude-plugin/plugin.json + CHANGELOG
-UPDATE_URL = "https://api.github.com/repos/dirkpaessler/remy/tags"
+VERSION = "0.4.2-beta"  # keep in step with .claude-plugin/plugin.json + CHANGELOG
+# The version file is a GitHub release asset (published by the tag workflow),
+# so GitHub's public download counter doubles as an anonymous tally of active
+# installations — nothing about the user or their documents is ever sent.
+UPDATE_URL = ("https://github.com/dirkpaessler/remy/releases/latest/"
+              "download/version.json")
+UPDATE_FALLBACK_URL = "https://api.github.com/repos/dirkpaessler/remy/tags"
 UPDATE_INTERVAL = 24 * 3600  # ask GitHub at most once a day
 
 DEFAULT_KEY_PATH = os.path.expanduser("~/.config/remy/service_account.json")
@@ -212,16 +217,27 @@ def check_for_update(force=False):
     if cached and fresh and not force:
         latest = cached.get("latest")
     else:
+        latest = None
         try:
             req = urllib.request.Request(
-                UPDATE_URL, headers={"User-Agent": f"remy/{VERSION}",
-                                     "Accept": "application/vnd.github+json"})
+                UPDATE_URL, headers={"User-Agent": f"remy/{VERSION}"})
             with urllib.request.urlopen(req, timeout=5) as resp:
-                tags = json.load(resp)
-            names = [t.get("name", "") for t in tags if isinstance(t, dict)]
-            latest = max(names, key=parse_version) if names else None
+                latest = json.load(resp).get("version")
         except Exception:
-            return None  # offline, rate-limited, repo moved — never a problem
+            pass  # no release yet, offline, rate-limited — try the tag list
+        if not latest:
+            try:
+                req = urllib.request.Request(
+                    UPDATE_FALLBACK_URL,
+                    headers={"User-Agent": f"remy/{VERSION}",
+                             "Accept": "application/vnd.github+json"})
+                with urllib.request.urlopen(req, timeout=5) as resp:
+                    tags = json.load(resp)
+                names = [t.get("name", "") for t in tags
+                         if isinstance(t, dict)]
+                latest = max(names, key=parse_version) if names else None
+            except Exception:
+                return None  # never a problem — Remy works offline
         state["update_check"] = {"at": int(time.time()), "latest": latest}
         save_state(state)
 

@@ -23,6 +23,7 @@ jobs:
       - name: Create the version tag if it does not exist yet
         run: |
           VERSION="$(python3 -c 'import json; print(json.load(open(".claude-plugin/plugin.json"))["version"])')"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           TAG="v$VERSION"
           if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
             echo "$TAG already exists — nothing to do."
@@ -30,4 +31,23 @@ jobs:
             git tag "$TAG"
             git push origin "$TAG"
             echo "Created $TAG."
+          fi
+      # The release carries a tiny version.json asset. Remy's daily update
+      # check downloads it, and GitHub's public download counter on the
+      # asset doubles as an anonymous tally of active installations.
+      # Deliberately NOT marked prerelease, even for betas: the check
+      # fetches releases/latest/download/version.json, and GitHub's
+      # "latest" skips prereleases.
+      - name: Create the release with the version asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="v$VERSION"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists — nothing to do."
+          else
+            printf '{"version": "%s"}\n' "$VERSION" > version.json
+            gh release create "$TAG" version.json --title "$TAG" \
+              --notes "See CHANGELOG.md for what changed."
+            echo "Created release $TAG."
           fi
