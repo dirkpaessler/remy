@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.4.1-beta — 2026-08-03
+
+Findings of a full code review, all fixed:
+
+- A document the service account cannot see no longer produces a Python
+  traceback: every command reports Google API denials as JSON with the
+  share-link hint. `session` on a document not shared by link was the
+  commonest way to hit this.
+- A beta now recognises its own final release as an update —
+  `parse_version` used to strip the pre-release suffix, so exactly the
+  beta testers would never have heard about the release.
+- MCP hardening: `suggest_insert` and `insert_image` explain themselves
+  when no anchor (after/before/at_end) is given instead of dying with a
+  TypeError, `finish` no longer drops `open_items` when no summary is
+  given, and unexpected errors come back as JSON instead of killing the
+  tool call.
+- The comment fallback names the real reason (the link does not allow
+  editing) instead of blaming the missing Developer Preview.
+- Docs match reality again: SETUP.md dropped an environment variable that
+  does nothing and a `--markup` flag that does not exist, and names the
+  actual `remy-bot@` account; SKILL.md no longer shows `whoami` taking a
+  URL and documents that anchors cannot reach footnotes, headers or
+  footers.
+- Housekeeping: the key-creation hints cover Google's ten-keys-per-account
+  limit, the key file is written with mode 600 from the first byte,
+  "deleteing" fixed, dead code removed.
+
 ## 0.4.0-beta — 2026-08-03
 
 First beta. The 0.1–0.3 line below tells the story of two days of field

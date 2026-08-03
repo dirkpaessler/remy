@@ -144,7 +144,8 @@ remy.py comment <url> --text "..." [--anchor-text "..."]
 remy.py reply <url> --comment-id ID --text "..." [--resolve]
 remy.py done <url> --tag-text "..." [--result "..."]
 remy.py finish <url> [--sign-off --summary "..." --open-items "..."]
-remy.py check|probe|whoami <url>
+remy.py check|probe <url>
+remy.py whoami                              # the identity Remy acts as
 remy.py version                             # installed vs. published
 remy.py install-mcp [--dry-run] [--remove]  # register with the desktop app
 remy.py setup [--guide] [--project-id ID] [--force]
@@ -166,6 +167,8 @@ Notes:
 - Comments created through the API **cannot be anchored** to a text range in
   Google Docs — they appear in the general comment list. Use markup when the
   user needs to see something in place.
+- Anchors reach only the document body (including tables). Text in
+  footnotes, headers or footers cannot be anchored or edited.
 
 ## Writing style inside the doc
 

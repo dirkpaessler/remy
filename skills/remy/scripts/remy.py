@@ -32,7 +32,7 @@ SCOPES = [
     "https://www.googleapis.com/auth/documents",
     "https://www.googleapis.com/auth/drive",
 ]
-VERSION = "0.4.0-beta"  # keep in step with .claude-plugin/plugin.json + CHANGELOG
+VERSION = "0.4.1-beta"  # keep in step with .claude-plugin/plugin.json + CHANGELOG
 UPDATE_URL = "https://api.github.com/repos/dirkpaessler/remy/tags"
 UPDATE_INTERVAL = 24 * 3600  # ask GitHub at most once a day
 
@@ -101,6 +101,32 @@ def fail(message, **extra):
     out({"ok": False, "error": message, **extra}, code=1)
 
 
+def invoke(fn, args):
+    """Run a command, turning Google API errors into Remy's JSON dialect.
+
+    Any command can hit a document the service account is not allowed to
+    see — the commonest failure there is — and that must come out as JSON
+    with a hint, never as a traceback. Matched by class name so this file
+    keeps working (and stays testable) without googleapiclient installed.
+    """
+    try:
+        fn(args)
+    except Exception as err:
+        if type(err).__name__ != "HttpError":
+            raise
+        status = getattr(getattr(err, "resp", None), "status", None)
+        if status in (403, 404):
+            fail("Google denied Remy's service account access to this "
+                 "document.",
+                 status=status,
+                 hint="Set the document's share link to 'Anyone with the "
+                      "link' (Editor for markup, Commenter for comments) "
+                      "and re-run. Do not ask the user to invite the "
+                      "service account by email.")
+        fail("Google API request failed.", status=status,
+             detail=str(err)[:300])
+
+
 def parse_doc_id(url_or_id):
     m = re.search(r"/document/(?:u/\d+/)?d/([a-zA-Z0-9_-]{20,})", url_or_id)
     if m:
@@ -156,9 +182,17 @@ def key_path(args):
 
 
 def parse_version(text):
-    """'v1.2.3' -> (1, 2, 3). Unparseable pieces sort as 0."""
-    parts = re.findall(r"\d+", text or "")
-    return tuple(int(p) for p in parts[:3]) or (0,)
+    """'v1.2.3' -> (1, 2, 3, 1); '1.2.3-beta' -> (1, 2, 3, 0).
+
+    The fourth element ranks a pre-release below its final release, so a
+    0.4.0-beta hears about 0.4.0. Unparseable pieces sort as 0.
+    """
+    text = (text or "").strip()
+    nums = [int(p) for p in re.findall(r"\d+", text)[:3]]
+    while len(nums) < 3:
+        nums.append(0)
+    final = 0 if "-" in text.lstrip("v") else 1
+    return (*nums, final)
 
 
 def check_for_update(force=False):
@@ -333,22 +367,12 @@ def collect_segments(content, segs):
                     continue
                 tr = pe.get("textRun")
                 if tr is not None:
-                    segs.append(
-                        {
-                            "doc": start,
-                            "text": tr.get("content", ""),
-                            "sug_ins": bool(tr.get("suggestedInsertionIds")),
-                            "sug_del": bool(tr.get("suggestedDeletionIds")),
-                        }
-                    )
+                    segs.append({"doc": start, "text": tr.get("content", "")})
                 else:
                     # inline object / page break / footnote ref / equation:
                     # occupies (endIndex - startIndex) UTF-16 units
                     n = pe.get("endIndex", start + 1) - start
-                    segs.append(
-                        {"doc": start, "text": OBJ_PLACEHOLDER * n,
-                         "sug_ins": False, "sug_del": False}
-                    )
+                    segs.append({"doc": start, "text": OBJ_PLACEHOLDER * n})
         elif "table" in el:
             for row in el["table"].get("tableRows", []):
                 for cell in row.get("tableCells", []):
@@ -831,6 +855,7 @@ def apply_edits(docs, drive, doc_id, edits, fallback=True, direct=False,
     `direct` is the sole escape hatch and requires explicit user consent.
     """
     edits = sorted(edits, key=lambda e: e["doc_range"][0], reverse=True)
+    comment_only = markup is False  # the user's explicit --comment-only
     if markup is None and not direct:
         markup = (not suggestions_available(docs, doc_id)
                   and can_edit(drive, doc_id))
@@ -877,9 +902,13 @@ def apply_edits(docs, drive, doc_id, edits, fallback=True, direct=False,
                       "Preview, or pass --direct to edit the document directly.")
         return post_as_comments(
             drive, doc_id, edits,
-            "Real suggestions are unavailable for this Cloud project "
-            "(Workspace Developer Preview not enabled), so Remy proposed the "
-            "changes as comments instead of editing the document.")
+            "Changes described as comments because --comment-only was given."
+            if comment_only else
+            "Remy may only comment on this document — the share link does "
+            "not allow editing — so the changes are described as comments. "
+            "Markup unlocks when the user sets the link to Editor (Share → "
+            "'Anyone with the link' → Editor); do not ask them to invite "
+            "the service account by email.")
 
     before = count_suggestions(fetch_document(docs, doc_id))
     try:
@@ -1003,7 +1032,6 @@ def cmd_markup(args):
              "note": "No Remy markup found in this document."})
 
     if args.action == "list":
-        dt = DocText(document)
         def show(ranges):
             items = []
             for s, t, _ in ranges:
@@ -1054,7 +1082,9 @@ def cmd_suggestions(args):
                      "with --id, or --all."})
 
     if _preview is None:
-        preview_missing(f"{args.action}ing a suggestion")
+        ing = {"accept": "accepting", "reject": "rejecting",
+               "delete": "deleting"}[args.action]
+        preview_missing(f"{ing} a suggestion")
     if not found:
         out({"ok": True, "docId": doc_id, "count": 0,
              "note": "No suggestions in this document."})
@@ -1070,8 +1100,9 @@ def cmd_suggestions(args):
         fail("Unknown suggestion id(s).", unknown=unknown,
              available=list(found))
     n = _preview.resolve(sys.modules[__name__], docs, doc_id, args.action, ids)
+    done = args.action + ("d" if args.action.endswith("e") else "ed")
     out({"ok": True, "docId": doc_id, "action": args.action, "resolved": n,
-         "note": f"{n} suggestion(s) {args.action}ed. This is permanent — "
+         "note": f"{n} suggestion(s) {done}. This is permanent — "
                  f"the document's version history is the only way back."})
 
 
@@ -1174,23 +1205,8 @@ def cmd_comments(args):
     doc_id = parse_doc_id(args.doc)
     creds = load_credentials(args)
     _, drive = services(creds)
-    fields = ("comments(id,content,resolved,anchor,createdTime,"
-              "author(displayName,me),quotedFileContent(value),"
-              "replies(id,content,author(displayName),action))")
-    result, page_token = [], None
-    while True:
-        resp = drive.comments().list(
-            fileId=doc_id, fields=fields + ",nextPageToken",
-            includeDeleted=False, pageSize=100, pageToken=page_token,
-        ).execute()
-        for c in resp.get("comments", []):
-            if c.get("resolved") and not args.include_resolved:
-                continue
-            result.append(c)
-        page_token = resp.get("nextPageToken")
-        if not page_token:
-            break
-    out({"ok": True, "docId": doc_id, "comments": result})
+    out({"ok": True, "docId": doc_id,
+         "comments": list_comments(drive, doc_id, args.include_resolved)})
 
 
 def cmd_comment(args):
@@ -1280,9 +1296,7 @@ def cmd_check(args):
     require_google_reachable()
     report = {"ok": True, "docId": doc_id}
     text, err = anonymous_export(doc_id, "text")
-    report["anonymous_read"] = err is None or f"failed: {err}"
-    if err is None:
-        report["anonymous_read"] = True
+    report["anonymous_read"] = True if err is None else f"failed: {err}"
     creds = load_credentials(args, required=False)
     if creds is None:
         report["service_account"] = False
@@ -1598,9 +1612,12 @@ def install_key(source):
     os.makedirs(os.path.dirname(DEFAULT_KEY_PATH), exist_ok=True)
     with open(source, encoding="utf-8") as src:
         content = src.read()
-    with open(DEFAULT_KEY_PATH, "w", encoding="utf-8") as dst:
+    # 0o600 from the first byte — never readable to others, even briefly
+    fd = os.open(DEFAULT_KEY_PATH,
+                 os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as dst:
         dst.write(content)
-    os.chmod(DEFAULT_KEY_PATH, 0o600)
+    os.chmod(DEFAULT_KEY_PATH, 0o600)  # a pre-existing file keeps its mode
     return data.get("client_email", "")
 
 
@@ -1783,8 +1800,12 @@ def cmd_setup(args):
     if not ok:
         fail("Could not create the key file.", detail=err[:400],
              hint="If this mentions iam.disableServiceAccountKeyCreation, "
-                  "the Google organisation forbids key files by policy. "
-                  "Otherwise re-run `remy.py setup` — it is idempotent.")
+                  "the Google organisation forbids key files by policy. If "
+                  "it mentions a key limit, earlier setups have left keys "
+                  "behind (Google allows ten per service account) — delete "
+                  "old ones with `gcloud iam service-accounts keys "
+                  "list|delete`. Otherwise re-run `remy.py setup` — it is "
+                  "idempotent.")
     os.chmod(DEFAULT_KEY_PATH, 0o600)
     steps.append(f"wrote key to {DEFAULT_KEY_PATH}")
 
@@ -2289,7 +2310,7 @@ def main():
     s.set_defaults(func=cmd_whoami)
 
     args = p.parse_args()
-    args.func(args)
+    invoke(args.func, args)
 
 
 if __name__ == "__main__":

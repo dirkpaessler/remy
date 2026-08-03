@@ -232,7 +232,7 @@ See [`SKILL.md`](skills/remy/SKILL.md) for the command reference and
 python3 skills/remy/tests/test_remy.py
 ```
 
-57 tests, no network, no credentials, no dependencies. They cover what is
+62 tests, no network, no credentials, no dependencies. They cover what is
 expensive to get wrong: that `remy.py` carries no preview API surface,
 UTF-16 index arithmetic, anchor disambiguation, the language guard, that the
 markup colours collide with none of the 81 swatches in the Google Docs

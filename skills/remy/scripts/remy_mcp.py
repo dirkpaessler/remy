@@ -55,9 +55,12 @@ def run(fn, **kw):
     buf = io.StringIO()
     try:
         with redirect_stdout(buf):
-            fn(_Args(**kw))
+            remy.invoke(fn, _Args(**kw))
     except SystemExit:
         pass
+    except Exception as e:
+        # A tool call must come back as JSON, never as a dead connection.
+        return {"ok": False, "error": f"{type(e).__name__}: {e}"[:500]}
     text = buf.getvalue().strip()
     try:
         return json.loads(text) if text else {"ok": False, "error": "no output"}
@@ -100,11 +103,22 @@ def suggest_delete(url: str, find: str, all_occurrences: bool = False) -> dict:
                all=all_occurrences, **_SUGGEST_DEFAULTS)
 
 
+def _one_anchor(after, before, at_end):
+    """Exactly one of after/before/at_end, or an explanation."""
+    if sum([bool(after), bool(before), bool(at_end)]) != 1:
+        return {"ok": False, "error": "Give exactly one of after, before "
+                                      "or at_end."}
+    return None
+
+
 @mcp.tool()
 def suggest_insert(url: str, text: str, after: str = "", before: str = "",
                    at_end: bool = False) -> dict:
     """Propose inserting text after/before an anchor, or at the end of the
     document. Exactly one of after, before, at_end must be given."""
+    err = _one_anchor(after, before, at_end)
+    if err:
+        return err
     return run(remy.cmd_suggest, doc=url, action="insert", text=text,
                after=after or None, before=before or None, end=at_end,
                all=False, **_SUGGEST_DEFAULTS)
@@ -125,6 +139,9 @@ def insert_image(url: str, image_url: str, after: str = "", before: str = "",
                  at_end: bool = False, caption: str = "") -> dict:
     """Insert a picture from a publicly reachable URL (Google fetches it).
     Proposed as shaded markup; exactly one of after, before, at_end."""
+    err = _one_anchor(after, before, at_end)
+    if err:
+        return err
     return run(remy.cmd_image, doc=url, url=image_url, after=after or None,
                before=before or None, end=at_end, width=None, height=None,
                caption=caption or None, nth=None, context=None, direct=False)
@@ -157,7 +174,7 @@ def task_done(url: str, tag_text: str, result: str = "") -> dict:
 def finish(url: str, summary: str = "", open_items: str = "") -> dict:
     """End a working session: reports unresolved markup and returns the exact
     question to put to the user. Pass a summary to sign off in the document."""
-    return run(remy.cmd_finish, doc=url, sign_off=bool(summary),
+    return run(remy.cmd_finish, doc=url, sign_off=bool(summary or open_items),
                summary=summary or None, open_items=open_items or None)
 
 

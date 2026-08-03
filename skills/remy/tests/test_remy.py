@@ -126,6 +126,55 @@ class TestParseDocId(unittest.TestCase):
             self.assertEqual(remy.parse_doc_id(url), wanted, url)
 
 
+class TestParseVersion(unittest.TestCase):
+    def test_prerelease_sorts_below_its_final_release(self):
+        self.assertLess(remy.parse_version("0.4.0-beta"),
+                        remy.parse_version("v0.4.0"))
+        self.assertLess(remy.parse_version("v0.4.0"),
+                        remy.parse_version("v0.4.1-beta"))
+
+    def test_the_beta_hears_about_its_own_final_release(self):
+        """The beta testers must not be the one group the release notice
+        skips."""
+        final = "v" + remy.VERSION.split("-")[0]
+        self.assertGreater(remy.parse_version(final),
+                           remy.parse_version(remy.VERSION))
+
+
+class TestInvoke(unittest.TestCase):
+    """API denials must come out as JSON with a hint, not as a traceback.
+
+    The commonest failure of all: a key is configured but the document is
+    not shared by link. Matched by class name, so no googleapiclient here."""
+
+    class HttpError(Exception):  # duck-typed like googleapiclient's
+        def __init__(self, status):
+            super().__init__(f"HTTP {status}")
+            self.resp = type("Resp", (), {"status": status})()
+
+    def test_denied_access_fails_with_the_share_hint(self):
+        def cmd(args):
+            raise self.HttpError(404)
+        with quiet() as buf, self.assertRaises(SystemExit) as cm:
+            remy.invoke(cmd, None)
+        self.assertEqual(cm.exception.code, 1)
+        self.assertIn("share link", buf.getvalue())
+
+    def test_other_google_errors_fail_as_json_too(self):
+        def cmd(args):
+            raise self.HttpError(500)
+        with quiet() as buf, self.assertRaises(SystemExit) as cm:
+            remy.invoke(cmd, None)
+        self.assertEqual(cm.exception.code, 1)
+        self.assertIn("Google API request failed", buf.getvalue())
+
+    def test_non_google_errors_still_raise(self):
+        def cmd(args):
+            raise ValueError("boom")
+        with self.assertRaises(ValueError):
+            remy.invoke(cmd, None)
+
+
 class TestU16Len(unittest.TestCase):
     def test_astral_characters_count_as_two(self):
         self.assertEqual(remy.u16len("abc"), 3)

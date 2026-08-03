@@ -92,6 +92,9 @@ if [ -z "$CREATED" ]; then
   echo
   echo "   If this mentions iam.disableServiceAccountKeyCreation, your"
   echo "   Google organisation forbids key files by policy — ask its admin."
+  echo "   If it mentions a key limit, earlier setups left keys behind:"
+  echo "   delete old keys for $SA"
+  echo "   in the Cloud console (IAM & Admin → Service Accounts → Keys)."
   echo "   Otherwise, simply rerun this script; it picks up where it left off."
   exit 1
 fi

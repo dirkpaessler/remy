@@ -119,7 +119,7 @@ Docs API is currently a Developer Preview feature:
    number you created above (`gcloud projects describe <id>
    --format="value(projectNumber)"`). Approval took about a day in our case.
 2. Once enrolled, add the `preview.py` module to
-   `skills/remy/scripts/` and set `REMY_ENABLE_PREVIEW_SUGGESTIONS=1`. Then
+   `skills/remy/scripts/`. Then
    `remy.py probe <doc>` confirms it. Suggestions then come out as genuine
    Google Docs tracked changes with Accept/Reject buttons, and
    `remy.py suggestions accept|reject` can resolve suggestions — including
@@ -147,9 +147,10 @@ integration would silently overwrite a colleague's manuscript while reporting
 Remy therefore never trusts the flag. It probes the real behaviour once (by
 inserting and immediately removing a zero-width marker), caches the result in
 `~/.config/remy/state.json`, and verifies after every suggestion batch that
-suggestions actually appeared. Without preview access Remy does not write to
-the document unless you ask it to — via `--markup` (coloured, reversible) or
-`--direct` (unmarked).
+suggestions actually appeared. Without preview access Remy writes coloured,
+reversible markup where the link allows editing, describes changes in
+comments where it does not, and never edits unmarked unless you pass
+`--direct`.
 
 ### ⚠️ You may not ship preview features publicly
 
@@ -193,6 +194,6 @@ one robot account.
 ## Identity note
 
 Suggestions/comments appear under the service account's name (e.g.
-`remy@remy-docs-skill-dirk.iam.gserviceaccount.com`). Anonymous writing —
+`remy-bot@remy-docs-skill-dirk.iam.gserviceaccount.com`). Anonymous writing —
 like the "anonymous animals" in a browser — is not possible through the
 official API; some identity is always required.
