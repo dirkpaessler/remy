@@ -1,0 +1,12 @@
+# Never commit credentials. Remy's key lives in ~/.config/remy/, but guard
+# against a stray copy landing in the repo.
+*service_account*.json
+*credentials*.json
+*.pem
+*.key
+state.json
+
+__pycache__/
+*.pyc
+.venv/
+.DS_Store
