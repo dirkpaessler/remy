@@ -67,7 +67,11 @@ on your own computer, so allowing it — including *"Always allow"* — is fine.
 
 *Tips: Installation only works in the Code window. Once installed, Remy
 works in Code, Chat and Cowork alike — the app bridges even cloud Cowork
-tasks to your Mac. Remy will tell you if there are new versions.*
+tasks to your Mac. Remy will tell you if there are new versions. Once a
+day it asks GitHub whether a newer version exists; GitHub's public
+download counter thereby doubles as an anonymous count of active
+installations. Nothing about you or your documents is ever sent, and
+`REMY_NO_UPDATE_CHECK=1` switches the check off.*
 
 ## 2. Share the document
 
