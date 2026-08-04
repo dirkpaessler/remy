@@ -41,7 +41,8 @@ What you need:
 
 - The **Claude Desktop App** or **Claude CLI** or
   **[Claude Science](#installing-remy-in-claude-science)** on your Mac or
-  Windows (on Windows only in Code, and so far untested)
+  Windows (on Windows tested once in the field — it works, with rough
+  edges during installation)
 - (Note: Remy does not work on claude.ai in a browser, or in the mobile
   apps).
 - A **Google account** — the ordinary one you already use for documents.
@@ -180,6 +181,12 @@ Desktop"* — or drag the file into the chat window.
 language of the document, not of your conversation, and refuses mismatches.
 If you deliberately want a translation, say so.
 
+**Remy's tools are missing in Chat or Cowork after the restart** (seen on
+Windows). The running app can write its own settings back on quit and
+overwrite the fresh entry. Close the app completely first, then tell
+Claude in Code to run Remy's `install-mcp` once more — second runs are
+harmless.
+
 ## What Remy cannot do
 
 - **Upload a picture from your computer:** Remy can place a picture that is
@@ -262,7 +269,7 @@ See [`SKILL.md`](skills/remy/SKILL.md) for the command reference and
 python3 skills/remy/tests/test_remy.py
 ```
 
-69 tests, no network, no credentials, no dependencies. They cover what is
+70 tests, no network, no credentials, no dependencies. They cover what is
 expensive to get wrong: that `remy.py` carries no preview API surface,
 UTF-16 index arithmetic, anchor disambiguation, the language guard, that the
 markup colours collide with none of the 81 swatches in the Google Docs

@@ -1,8 +1,7 @@
 {
   "name": "remy",
-  "displayName": "Remy — Google Docs collaborator",
   "description": "Collaborate on Google Docs through a share link, without a browser. Proposes every change as reviewable coloured markup, reads and answers comments, and executes @@remy commands left in the document.",
-  "version": "0.4.3-beta",
+  "version": "0.4.4-beta",
   "author": {
     "name": "Dirk Paessler"
   },

@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.4.4-beta — 2026-08-04
+
+Everything in here was found by the first Windows field test — thank you!
+
+- The success message no longer crashes on a cp1252 Windows console (the
+  ⌘ symbol): unencodable characters are escaped instead, so a successful
+  install no longer reads as a failure.
+- `install-mcp` explains the restart for Windows too (File > Exit,
+  including the tray icon) and warns that a *running* app may write its
+  own settings back on quit and overwrite the fresh entry — if Remy's
+  tools are missing after the restart, close the app first and run it
+  once more.
+- `displayName` removed from the plugin manifest: older Claude Code
+  versions reject manifests with fields they do not know, which made the
+  install fail until Claude Code itself was updated.
+- README: Windows is no longer "untested" — one field test says it works,
+  with rough edges during installation; new troubleshooting entry for the
+  vanished connector entry.
+
 ## 0.4.3-beta — 2026-08-04
 
 - Remy can format. `suggest format` proposes heading (1-6), bold, italic

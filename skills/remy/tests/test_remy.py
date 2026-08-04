@@ -722,6 +722,28 @@ class TestDocsMatchReality(unittest.TestCase):
                              f"longer uses")
 
 
+class TestWindowsConsole(unittest.TestCase):
+    """A cp1252 Windows console cannot print ⌘ — the success message used
+    to crash AFTER the work succeeded, which reads as a failure (found by
+    the first Windows field test)."""
+
+    def test_out_survives_a_cp1252_console(self):
+        import io
+        buf = io.BytesIO()
+        cp1252 = io.TextIOWrapper(buf, encoding="cp1252")
+        orig = sys.stdout
+        sys.stdout = cp1252
+        try:
+            with self.assertRaises(SystemExit) as cm:
+                remy.out({"note": "quit with ⌘Q"})
+        finally:
+            sys.stdout = orig
+        cp1252.flush()
+        self.assertEqual(cm.exception.code, 0, "must exit cleanly, not crash")
+        self.assertIn(b"\\u2318", buf.getvalue(),
+                      "the symbol must come out escaped, not kill the run")
+
+
 class TestKeyRecognition(unittest.TestCase):
     """Downloads folders contain arbitrary JSON — a top-level list used to
     crash the key finder with AttributeError (found live)."""

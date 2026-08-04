@@ -32,7 +32,7 @@ SCOPES = [
     "https://www.googleapis.com/auth/documents",
     "https://www.googleapis.com/auth/drive",
 ]
-VERSION = "0.4.3-beta"  # keep in step with .claude-plugin/plugin.json + CHANGELOG
+VERSION = "0.4.4-beta"  # keep in step with .claude-plugin/plugin.json + CHANGELOG
 # The version file is a GitHub release asset (published by the tag workflow),
 # so GitHub's public download counter doubles as an anonymous tally of active
 # installations — nothing about the user or their documents is ever sent.
@@ -98,7 +98,13 @@ def preview_missing(action="that"):
 # ---------------------------------------------------------------- utilities
 
 def out(obj, code=0):
-    print(json.dumps(obj, ensure_ascii=False, indent=2))
+    try:
+        print(json.dumps(obj, ensure_ascii=False, indent=2))
+    except UnicodeEncodeError:
+        # a cp1252 Windows console cannot print ⌘ and friends — escape
+        # rather than crash after the work already succeeded (found live
+        # by the first Windows field test)
+        print(json.dumps(obj, ensure_ascii=True, indent=2))
     sys.exit(code)
 
 
@@ -2286,8 +2292,14 @@ def cmd_install_mcp(args):
          "backup": backup if os.path.exists(backup) else None,
          "server": entry,
          "next_steps": [
-             "Quit the Claude app completely (⌘Q) and open it again — it reads "
-             "this file only at startup.",
+             "Quit the Claude app completely (⌘Q on the Mac; File > Exit on "
+             "Windows, including the tray icon) and open it again — it "
+             "reads this file only at startup.",
+             "If the app was running just now, it may write its own "
+             "settings back on quit and overwrite this entry. Should "
+             "Remy's tools be missing after the restart, close the app "
+             "first and run install-mcp once more — second runs are "
+             "harmless.",
              "Remy's tools then appear in Chat and in Cowork. Claude Code is "
              "unaffected; it keeps using the skill.",
              "The entry survives plugin updates: the registered launcher "
