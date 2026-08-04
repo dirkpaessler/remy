@@ -74,6 +74,14 @@ Markup never destroys anything: proposed deletions are struck through, so a
 human decides what actually disappears. Resolve with
 `remy.py markup list|accept|reject`.
 
+**Format changes** follow the same rule. `suggest format` strikes the old
+text through *in its old format* and re-inserts the same text *in the new
+format* (heading 1-6, bold, italic, or a link), mint-highlighted; `markup
+accept|reject` resolves it like any other change. For `--heading`, `--find`
+must cover a whole paragraph. `suggest insert --heading N` inserts new text
+as a ready-styled heading. Remy never restyles text in place except with
+`--direct`.
+
 **Pictures.** `remy.py image` inserts one from a URL — Google fetches it
 itself, so it must be publicly reachable (under 50 MB, under 25 megapixels,
 PNG/JPEG/GIF). Remy cannot upload a local file: it has no Drive of its own to
@@ -135,7 +143,8 @@ remy.py read <url> [--format markdown|text|raw] [--suggestions accepted|inline]
 remy.py tasks <url>                         # @@remy commands only
 remy.py suggest replace <url> --find "old" --replace "new" [--all|--nth N] [--context "..."]
 remy.py suggest delete  <url> --find "text" [--all|--nth N] [--context "..."]
-remy.py suggest insert  <url> --text "..." (--after "anchor"|--before "anchor"|--end)
+remy.py suggest insert  <url> --text "..." (--after "anchor"|--before "anchor"|--end) [--heading N]
+remy.py suggest format  <url> --find "..." (--heading N|--bold|--italic|--link URL) [--all|--nth N] [--context "..."]
 remy.py image <url> --url "https://…" (--after "anchor"|--before "anchor"|--end) [--width PT] [--height PT] [--caption "..."]
 remy.py markup list|accept|reject <url>
 remy.py suggestions list|accept|reject|delete <url> [--id ID] [--all]

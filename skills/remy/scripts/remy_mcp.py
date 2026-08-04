@@ -113,15 +113,30 @@ def _one_anchor(after, before, at_end):
 
 @mcp.tool()
 def suggest_insert(url: str, text: str, after: str = "", before: str = "",
-                   at_end: bool = False) -> dict:
+                   at_end: bool = False, heading: int = 0) -> dict:
     """Propose inserting text after/before an anchor, or at the end of the
-    document. Exactly one of after, before, at_end must be given."""
+    document. Exactly one of after, before, at_end must be given. Pass
+    heading 1-6 to insert the text as a ready-styled heading paragraph."""
     err = _one_anchor(after, before, at_end)
     if err:
         return err
     return run(remy.cmd_suggest, doc=url, action="insert", text=text,
                after=after or None, before=before or None, end=at_end,
-               all=False, **_SUGGEST_DEFAULTS)
+               heading=heading or None, all=False, **_SUGGEST_DEFAULTS)
+
+
+@mcp.tool()
+def suggest_format(url: str, find: str, heading: int = 0,
+                   bold: bool = False, italic: bool = False,
+                   link: str = "", all_occurrences: bool = False) -> dict:
+    """Propose a format change (heading 1-6, bold, italic, or a link): the
+    old text is struck through in its old format and the same text is
+    re-inserted in the new format, mint-highlighted — resolved with
+    markup accept|reject like any other change. For heading, find must
+    cover a whole paragraph."""
+    return run(remy.cmd_suggest, doc=url, action="format", find=find,
+               heading=heading or None, bold=bold, italic=italic,
+               link=link or None, all=all_occurrences, **_SUGGEST_DEFAULTS)
 
 
 @mcp.tool()

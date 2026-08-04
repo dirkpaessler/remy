@@ -32,7 +32,7 @@ SCOPES = [
     "https://www.googleapis.com/auth/documents",
     "https://www.googleapis.com/auth/drive",
 ]
-VERSION = "0.4.2-beta"  # keep in step with .claude-plugin/plugin.json + CHANGELOG
+VERSION = "0.4.3-beta"  # keep in step with .claude-plugin/plugin.json + CHANGELOG
 # The version file is a GitHub release asset (published by the tag workflow),
 # so GitHub's public download counter doubles as an anonymous tally of active
 # installations — nothing about the user or their documents is ever sent.
@@ -325,11 +325,17 @@ def require_google_reachable():
                 "Installing Remy may have appeared to succeed, but every "
                 "Google request is refused before it leaves the sandbox — "
                 "and the sandbox is discarded after the session anyway.",
-            tell_the_user="Remy cannot run in this window. It works in the "
-                          "Claude desktop app on your own computer — in "
-                          "Code, Cowork and Chat — and in a local terminal. "
-                          "Install it there once; the instructions are in "
-                          "the README.",
+            tell_the_user="Remy cannot reach Google from this window. It "
+                          "works in the Claude desktop app on your own "
+                          "computer — in Code, Cowork and Chat — and in a "
+                          "local terminal. Install it there once; the "
+                          "instructions are in the README.",
+            if_the_environment_can_grant_network=(
+                "Some cloud workspaces (e.g. Claude Science) can approve "
+                "network access on request. If this one can, request "
+                "access to docs.google.com, docs.googleapis.com, "
+                "www.googleapis.com and oauth2.googleapis.com, then run "
+                "the command again."),
             instructions="https://github.com/dirkpaessler/remy#getting-started",
         )
 
@@ -767,11 +773,14 @@ def image_markup_requests(index, image):
     ]
 
 
-def apply_markup(docs, doc_id, edits):
-    """Emulate tracked changes with colour. Proposed deletions are struck
-    through, never removed; insertions are highlighted."""
-    from googleapiclient.errors import HttpError
+def markup_requests(edits):
+    """The batchUpdate that writes edits as coloured markup. Pure.
 
+    An edit may carry format fields for its inserted text — "bold",
+    "italic", "link", and "named_style" (a heading for the inserted
+    paragraph). The format lands only on the mint copy; the original is
+    never restyled beyond the strikethrough, so reject restores it exactly.
+    """
     requests = []
     for e in sorted(edits, key=lambda e: e["doc_range"][0], reverse=True):
         s, t = e["doc_range"]
@@ -784,11 +793,40 @@ def apply_markup(docs, doc_id, edits):
         if e["new"]:
             requests.append({"insertText": {"location": {"index": t},
                                             "text": e["new"]}})
+            style = {"strikethrough": False,
+                     "backgroundColor": {"color": {"rgbColor": MARK_INSERT_BG}}}
+            fields = ["strikethrough", "backgroundColor"]
+            for k in ("bold", "italic"):
+                if e.get(k):
+                    style[k] = True
+                    fields.append(k)
+            if e.get("link"):
+                style["link"] = {"url": e["link"]}
+                fields.append("link")
+            if e.get("named_style"):
+                # the inserted block's own paragraph; a leading newline only
+                # ends the paragraph before it and stays unstyled. This MUST
+                # run before the mint below: applying a named style resets
+                # the paragraph's text styling (verified live), so the mint
+                # would otherwise be wiped and the markup unrecognisable.
+                a = t + (1 if e["new"].startswith("\n") else 0)
+                requests.append({"updateParagraphStyle": {
+                    "range": {"startIndex": a,
+                              "endIndex": t + u16len(e["new"])},
+                    "paragraphStyle": {"namedStyleType": e["named_style"]},
+                    "fields": "namedStyleType"}})
             requests.append({"updateTextStyle": {
                 "range": {"startIndex": t, "endIndex": t + u16len(e["new"])},
-                "textStyle": {"strikethrough": False,
-                              "backgroundColor": {"color": {"rgbColor": MARK_INSERT_BG}}},
-                "fields": "strikethrough,backgroundColor"}})
+                "textStyle": style, "fields": ",".join(fields)}})
+    return requests
+
+
+def apply_markup(docs, doc_id, edits):
+    """Emulate tracked changes with colour. Proposed deletions are struck
+    through, never removed; insertions are highlighted."""
+    from googleapiclient.errors import HttpError
+
+    requests = markup_requests(edits)
     try:
         docs.documents().batchUpdate(
             documentId=doc_id, body={"requests": requests}).execute()
@@ -819,6 +857,122 @@ def post_as_comments(drive, doc_id, edits, note, **extra):
         made.append(c.get("id"))
     return {"ok": True, "mode": "comment-fallback", "edits": len(edits),
             "comment_ids": made, "note": note, **extra}
+
+
+NAMED_HEADINGS = {n: f"HEADING_{n}" for n in range(1, 7)}
+
+
+def build_format_edit(dt, a, b, heading=None, bold=None, italic=None,
+                      link=None):
+    """A format change as markup: strike the old text in its old format,
+    re-insert the same text in the new format, mint-highlighted.
+
+    Reject restores the original untouched (its format was never changed,
+    only struck through); accept keeps only the styled copy. So format
+    changes stay exactly as reversible as text changes, with no undo
+    record needed.
+    """
+    old = dt.text[a:b]
+    e = {"old": old, "new": old}
+    if bold:
+        e["bold"] = True
+    if italic:
+        e["italic"] = True
+    if link:
+        e["link"] = link
+    if heading:
+        # A heading is a paragraph property: the anchor must cover a whole
+        # paragraph, and its newline travels with the edit so accepting
+        # leaves no empty line behind.
+        if ((a > 0 and dt.text[a - 1] != "\n")
+                or b >= len(dt.text) or dt.text[b] != "\n"):
+            fail(f"--heading needs a whole paragraph; {old[:60]!r} is not "
+                 f"one.",
+                 hint="Pass the full paragraph text (line start to line "
+                      "end) as --find.")
+        if b == len(dt.text) - 1:
+            # the styled copy would have to go after the body's final
+            # newline, where nothing can be inserted
+            fail("--heading cannot mark up the document's very last "
+                 "paragraph.",
+                 hint="Use --direct for this one, or add an empty line "
+                      "after it first.")
+        e["named_style"] = NAMED_HEADINGS[heading]
+        e["doc_range"] = (dt.doc_index(a), dt.doc_index(b) + 1)  # + newline
+        e["new"] = old + "\n"
+    else:
+        e["doc_range"] = (dt.doc_index(a), dt.doc_index(b))
+    return e
+
+
+def describe_format(e):
+    what = e.get("named_style") or ", ".join(
+        k for k in ("bold", "italic", "link") if e.get(k))
+    return f"\U0001f400 Remy suggests formatting «{e['old']}» as {what}"
+
+
+def direct_format_requests(edits):
+    """--direct: restyle the original text in place, no markup. Pure."""
+    requests = []
+    for e in sorted(edits, key=lambda e: e["doc_range"][0], reverse=True):
+        s, t = e["doc_range"]
+        if e.get("named_style"):
+            requests.append({"updateParagraphStyle": {
+                "range": {"startIndex": s, "endIndex": t},
+                "paragraphStyle": {"namedStyleType": e["named_style"]},
+                "fields": "namedStyleType"}})
+        style, fields = {}, []
+        for k in ("bold", "italic"):
+            if e.get(k):
+                style[k] = True
+                fields.append(k)
+        if e.get("link"):
+            style["link"] = {"url": e["link"]}
+            fields.append("link")
+        if fields:
+            requests.append({"updateTextStyle": {
+                "range": {"startIndex": s, "endIndex": t},
+                "textStyle": style, "fields": ",".join(fields)}})
+    return requests
+
+
+def apply_format(docs, drive, doc_id, edits, direct=False, dry_run=False):
+    """Apply format edits: markup by default, in-place with --direct,
+    a describing comment when Remy may only comment."""
+    from googleapiclient.errors import HttpError
+
+    editable = can_edit(drive, doc_id)
+    mode = ("direct-edit" if direct else
+            "markup" if editable else "comment-fallback")
+    if dry_run:
+        return {"ok": True, "mode": mode, "dry_run": True,
+                "edits": len(edits),
+                "changes": [{"old": e["old"][:120],
+                             "format": e.get("named_style") or {
+                                 k: e[k] for k in ("bold", "italic", "link")
+                                 if e.get(k)}}
+                            for e in edits],
+                "note": "Nothing was written."}
+    if direct:
+        try:
+            docs.documents().batchUpdate(
+                documentId=doc_id,
+                body={"requests": direct_format_requests(edits)}).execute()
+        except HttpError as err:
+            fail("Direct format batchUpdate failed", detail=str(err))
+        return {"ok": True, "mode": "direct-edit", "edits": len(edits),
+                "note": "Formats applied in place because --direct was "
+                        "given. Undo via File > Version history."}
+    if editable:
+        return apply_markup(docs, doc_id, edits)
+    made = [comment_fallback(drive, doc_id, describe_format(e),
+                             quote=e["old"] or None).get("id")
+            for e in edits]
+    return {"ok": True, "mode": "comment-fallback", "edits": len(edits),
+            "comment_ids": made,
+            "note": "Remy may only comment on this document, so the format "
+                    "changes are described instead of made. Markup unlocks "
+                    "when the share link is set to Editor."}
 
 
 def enforce_language(dt, edits, force=False):
@@ -1018,18 +1172,41 @@ def cmd_suggest(args):
                       "--context.")
         if args.end:
             # insert before the final newline of the body
-            idx = dt.doc_index(len(dt.text) - 1) if dt.text else 1
-            edits.append({"doc_range": (idx, idx), "old": "", "new": args.text})
+            py = len(dt.text) - 1 if dt.text else 0
         else:
             anchor = args.after or args.before
             (a, b), = resolve_anchor(dt, anchor, False, args.nth, args.context)
-            idx = dt.doc_index(b) if args.after else dt.doc_index(a)
-            edits.append({"doc_range": (idx, idx), "old": "", "new": args.text})
+            py = b if args.after else a
+        idx = dt.doc_index(py) if dt.text else 1
+        e = {"doc_range": (idx, idx), "old": "", "new": args.text}
+        if args.heading:
+            # the heading gets a paragraph of its own: split off the text
+            # before it unless the insertion point already starts a line
+            at_line_start = py == 0 or (dt.text and dt.text[py - 1] == "\n")
+            e["new"] = (("" if at_line_start else "\n")
+                        + args.text.rstrip("\n") + "\n")
+            e["named_style"] = NAMED_HEADINGS[args.heading]
+        edits.append(e)
+    elif args.action == "format":
+        if not (args.heading or args.bold or args.italic or args.link):
+            fail("Nothing to format.",
+                 hint="Give --heading N, --bold, --italic and/or "
+                      "--link URL.")
+        for a, b in resolve_anchor(dt, args.find, args.all, args.nth,
+                                   args.context):
+            edits.append(build_format_edit(
+                dt, a, b, heading=args.heading, bold=args.bold,
+                italic=args.italic, link=args.link))
 
     enforce_language(dt, edits, force=args.force_language)
-    result = apply_edits(docs, drive, doc_id, edits,
-                         fallback=not args.no_fallback, direct=args.direct,
-                         markup=args.markup, dry_run=args.dry_run)
+    if args.action == "format":
+        result = apply_format(docs, drive, doc_id, edits,
+                              direct=args.direct, dry_run=args.dry_run)
+    else:
+        result = apply_edits(docs, drive, doc_id, edits,
+                             fallback=not args.no_fallback,
+                             direct=args.direct,
+                             markup=args.markup, dry_run=args.dry_run)
     result["docId"] = doc_id
     result["title"] = dt.title
     out(result, code=0 if result.get("ok") else 1)
@@ -2178,7 +2355,19 @@ def main():
     g.add_argument("--after", help="anchor text; insert right after it")
     g.add_argument("--before", help="anchor text; insert right before it")
     g.add_argument("--end", action="store_true", help="append at end of body")
-    for sp in (r, d, i):
+    i.add_argument("--heading", type=int, choices=range(1, 7),
+                   help="insert the text as a heading of this level, in a "
+                        "paragraph of its own")
+    f = ssub.add_parser("format")
+    f.add_argument("doc")
+    f.add_argument("--find", required=True)
+    f.add_argument("--heading", type=int, choices=range(1, 7),
+                   help="make the matched paragraph a heading; --find must "
+                        "cover the whole paragraph")
+    f.add_argument("--bold", action="store_true")
+    f.add_argument("--italic", action="store_true")
+    f.add_argument("--link", help="wrap the matched text in this URL")
+    for sp in (r, d, i, f):
         sp.add_argument("--all", action="store_true",
                         help="apply to every occurrence")
         sp.add_argument("--nth", type=int,

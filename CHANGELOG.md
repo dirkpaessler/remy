@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.4.3-beta — 2026-08-04
+
+- Remy can format. `suggest format` proposes heading (1-6), bold, italic
+  and link changes with the markup strategy Dirk specified: the old text
+  is struck through **in its old format**, the same text is re-inserted
+  **in the new format**, mint-highlighted — so `markup reject` still
+  restores the document exactly, with no undo record needed, and `markup
+  accept` keeps only the styled copy. `suggest insert --heading N`
+  inserts new text as a ready-styled heading paragraph. The MCP server
+  gains `suggest_format` and a `heading` parameter on `suggest_insert`.
+  `--direct` restyles in place, as everywhere.
+- The cloud-sandbox abort no longer claims Remy can never run there:
+  environments that can grant network access on request (Claude Science
+  can) are told which four Google domains to approve and to retry —
+  found live when Remy came up inside Claude Science.
+
 ## 0.4.2-beta — 2026-08-03
 
 - The daily update check downloads a tiny `version.json` from the latest

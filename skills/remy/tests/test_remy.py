@@ -325,6 +325,85 @@ class TestMarkupColours(unittest.TestCase):
         self.assertEqual(remy.markup_ranges(doc)[1], [])
 
 
+# --------------------------------------------------------------- format markup
+
+class TestFormatMarkup(unittest.TestCase):
+    """Format changes as markup, Dirk's strategy: the old text is struck
+    through in its old format, the same text re-inserted in the new format,
+    mint — so reject restores the document exactly with no undo record."""
+
+    def test_heading_needs_a_whole_paragraph(self):
+        dt = remy.DocText(document("one two three\n"))
+        with quiet(), self.assertRaises(SystemExit) as cm:
+            remy.build_format_edit(dt, 4, 7, heading=2)  # just "two"
+        self.assertEqual(cm.exception.code, 1)
+
+    def test_heading_refuses_the_documents_last_paragraph(self):
+        # the styled copy would land after the body's final newline,
+        # where the API allows no insertion
+        dt = remy.DocText(document("only line\n"))
+        with quiet(), self.assertRaises(SystemExit) as cm:
+            remy.build_format_edit(dt, 0, 9, heading=2)
+        self.assertEqual(cm.exception.code, 1)
+
+    def test_heading_edit_takes_the_newline_along(self):
+        dt = remy.DocText(document("A heading line\n", "after\n"))
+        e = remy.build_format_edit(dt, 0, 14, heading=2)
+        self.assertEqual(e["doc_range"], (1, 16),
+                         "the paragraph's newline must travel with the "
+                         "edit, or accept leaves an empty line behind")
+        self.assertEqual(e["new"], "A heading line\n")
+        self.assertEqual(e["named_style"], "HEADING_2")
+
+    def test_markup_requests_for_a_heading_edit(self):
+        e = {"doc_range": (1, 16), "old": "A heading line",
+             "new": "A heading line\n", "named_style": "HEADING_2"}
+        reqs = remy.markup_requests([e])
+        self.assertEqual([next(iter(r)) for r in reqs],
+                         ["updateTextStyle", "insertText",
+                          "updateParagraphStyle", "updateTextStyle"],
+                         "the named style must be applied BEFORE the mint: "
+                         "applying it resets the paragraph's text styling "
+                         "and would wipe the marking (seen live)")
+        self.assertTrue(
+            reqs[0]["updateTextStyle"]["textStyle"]["strikethrough"],
+            "the original must be struck through, never restyled")
+        ps = reqs[2]["updateParagraphStyle"]
+        self.assertEqual(ps["paragraphStyle"],
+                         {"namedStyleType": "HEADING_2"})
+        self.assertEqual((ps["range"]["startIndex"], ps["range"]["endIndex"]),
+                         (16, 16 + remy.u16len("A heading line\n")))
+
+    def test_inline_format_copy_carries_the_style(self):
+        e = {"doc_range": (5, 8), "old": "two", "new": "two",
+             "bold": True, "link": "https://x"}
+        reqs = remy.markup_requests([e])
+        st = reqs[2]["updateTextStyle"]
+        self.assertTrue(st["textStyle"]["bold"])
+        self.assertEqual(st["textStyle"]["link"], {"url": "https://x"})
+        self.assertIn("bold", st["fields"])
+        self.assertIn("link", st["fields"])
+
+    def test_inserted_heading_block_styles_only_its_own_paragraph(self):
+        # insert --heading mid-paragraph: the leading newline splits the
+        # paragraph and must stay unstyled
+        e = {"doc_range": (10, 10), "old": "", "new": "\nTitle\n",
+             "named_style": "HEADING_1"}
+        reqs = remy.markup_requests([e])
+        ps = reqs[1]["updateParagraphStyle"]["range"]
+        self.assertEqual((ps["startIndex"], ps["endIndex"]),
+                         (11, 10 + remy.u16len("\nTitle\n")))
+
+    def test_direct_format_restyles_in_place(self):
+        e = {"doc_range": (1, 16), "old": "A heading line",
+             "new": "A heading line\n", "named_style": "HEADING_2"}
+        reqs = remy.direct_format_requests([e])
+        self.assertEqual([next(iter(r)) for r in reqs],
+                         ["updateParagraphStyle"])
+        self.assertEqual(reqs[0]["updateParagraphStyle"]["range"],
+                         {"startIndex": 1, "endIndex": 16})
+
+
 # --------------------------------------------------------------- shaded paragraphs
 
 def shaded_para(text, hexcolour, start=1):
