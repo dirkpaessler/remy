@@ -39,12 +39,11 @@ not handing over all your data to the AI!
 
 What you need:
 
-- The **Claude Desktop App** or **Claude CLI** on your Mac or Windows (on
-  Windows only in Code, and so far untested)
+- The **Claude Desktop App** or **Claude CLI** or
+  **[Claude Science](#installing-remy-in-claude-science)** on your Mac or
+  Windows (on Windows only in Code, and so far untested)
 - (Note: Remy does not work on claude.ai in a browser, or in the mobile
-  apps — but it does work in **Claude Science**; that installation is
-  different, see [Installing Remy in Claude
-  Science](#installing-remy-in-claude-science) below.)
+  apps).
 - A **Google account** — the ordinary one you already use for documents.
 
 ## 1. Install Remy
@@ -204,25 +203,27 @@ history. Still, read Remy's changes before accepting them, the way you would
 read a colleague's — it is good, it is fast, and it is occasionally
 confident about something that is wrong.
 
-## Installing Remy in Claude Science
+# Installing Remy in Claude Science
 
 Claude Science runs in the cloud, so Remy gets there differently than on
 your Mac — no plugin command, no key file on disk:
 
-1. **Import the skill.** Capabilities → Skills → import the GitHub bundle
-   `dirkpaessler/remy`.
-2. **Store the key.** Customize → Credentials → Add Credential → Google
-   Cloud → *Service account JSON*: paste the full contents of a
-   `remy-key.json` (the same five-minute setup from ["Remy needs a
-   personality"](#3-but-first-remy-needs-a-personality) above produces
-   it). Leave *GCS buckets* empty. Tip: give the cloud its own key rather
-   than reusing the one from your computer — you can revoke it
-   separately.
-3. **Approve Google access.** The first time Remy acts in a session, the
-   sandbox asks to reach four Google domains — `docs.google.com`,
-   `docs.googleapis.com`, `www.googleapis.com` and
-   `oauth2.googleapis.com`. Allow them. This approval is per session; the
-   key and the skill survive.
+**1. Import the skill.** Capabilities → Skills → import the GitHub bundle
+`dirkpaessler/remy`.
+
+**2. Store the key.** Ask Remy to "set up a service account" (the same
+five-minute setup from ["Remy needs a
+personality"](#3-but-first-remy-needs-a-personality) above produces it).
+You will get a keyfile download. Customize → Credentials → Add Credential
+→ Google Cloud → *Service account JSON*: paste the full contents of
+`remy-key.json`. Leave *GCS buckets* empty. Tip: give the cloud its own
+key rather than reusing the one from your computer — you can revoke it
+separately.
+
+**3. Approve Google access.** The first time Remy acts in a session, the
+sandbox asks to reach four Google domains — `docs.google.com`,
+`docs.googleapis.com`, `www.googleapis.com` and `oauth2.googleapis.com`.
+Allow them. This approval is per session; the key and the skill survive.
 
 Then paste a share link and talk, as everywhere else.
 
