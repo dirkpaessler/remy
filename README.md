@@ -12,7 +12,8 @@ Code/Cowork/Chat is cumbersome with the standard skills. With **Remy**
 hands?) Claude becomes a fully capable collaborator that co-authors your
 document.
 
-Remy is a skill you add to your Claude Desktop app or Claude CLI. Give it
+Remy is a skill you add to your Claude Desktop app or Claude CLI or Claude
+Science. Give it
 the sharing link to a Google Doc and it works on the document alongside you
 and your colleagues — proofreading, rewriting, translating, answering
 comments — while you also work on it. Every change it makes is **visible and
@@ -41,8 +42,7 @@ What you need:
 
 - The **Claude Desktop App** or **Claude CLI** or
   **[Claude Science](#installing-remy-in-claude-science)** on your Mac or
-  Windows (on Windows tested once in the field — it works, with rough
-  edges during installation)
+  Windows
 - (Note: Remy does not work on claude.ai in a browser, or in the mobile
   apps).
 - A **Google account** — the ordinary one you already use for documents.
