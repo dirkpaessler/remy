@@ -1,4 +1,4 @@
-# Remy V0.4 (beta) 🐀
+# Remy V0.5 🐀
 
 *The invisible sous-chef for Google Docs.*
 
@@ -25,9 +25,9 @@ This is what it looks like (Remy has corrected a typo):
 
 ![Remy's markup: the old wording struck through in pink, the new wording in mint](docs/img/markup-example.png)
 
-Note: Google's APIs do not support native "suggestions" yet. It is in beta,
-email [remy@dirkpaessler.com](mailto:remy@dirkpaessler.com) to become a beta
-tester.
+Note: Google's APIs do not support native "suggestions" yet. Native
+suggestions are in a closed beta — email
+[remy@dirkpaessler.com](mailto:remy@dirkpaessler.com) to test them.
 
 ## Minimizes AI's blast-radius through a minimalistic security concept
 

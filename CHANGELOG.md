@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.5.0 — 2026-08-05
+
+Out of beta. The core — coloured markup, accept/reject, @@remy notes,
+comments, the one-call session — has been unchanged since 0.4.0 and has
+now survived two independent field tests (Windows, and a fresh CLI
+install) plus three environments (desktop app, CLI, Claude Science),
+with every finding fixed the same day. 73 offline tests and the
+docs-match-reality suite guard it.
+
+The road ahead: **1.0** when Anthropic accepts Remy into the official
+plugin directory; **2.0** when Google makes suggestion-writing generally
+available and the native-suggestions module moves into this public
+build.
+
 ## 0.4.5-beta — 2026-08-05
 
 - Running under a plain python3 older than 3.10 now says so in every
