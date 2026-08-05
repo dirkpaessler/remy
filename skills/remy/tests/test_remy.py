@@ -135,7 +135,9 @@ class TestParseVersion(unittest.TestCase):
 
     def test_the_beta_hears_about_its_own_final_release(self):
         """The beta testers must not be the one group the release notice
-        skips."""
+        skips. Only meaningful while VERSION is a pre-release."""
+        if "-" not in remy.VERSION:
+            self.skipTest("stable build — nothing to strip")
         final = "v" + remy.VERSION.split("-")[0]
         self.assertGreater(remy.parse_version(final),
                            remy.parse_version(remy.VERSION))
