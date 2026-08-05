@@ -612,6 +612,64 @@ class TestTaskScanning(unittest.TestCase):
         self.assertEqual(second, [], "the same job must not run twice")
 
 
+# --------------------------------------------------------------- markdown
+
+class TestMarkdownImport(unittest.TestCase):
+    """The md command's parser and index arithmetic — contributed from the
+    field (a 9 KB report with six tables) and pinned down here."""
+
+    def test_inline_marks_nest_and_map(self):
+        # (a bold run ENDING in italic, "***", is a known parser limit)
+        plain, runs = remy.md_inline("a **b *c* x** `d`")
+        self.assertEqual(plain, "a b c x d")
+        styles = {(s, e): st for s, e, st in runs}
+        self.assertEqual(styles[(2, 7)], {"bold": True})
+        self.assertEqual(styles[(4, 5)], {"italic": True})
+        self.assertIn("weightedFontFamily", styles[(8, 9)])
+
+    def test_blocks_parse_headings_lists_rules_tables(self):
+        md = ("# Title\n\nSome text\nspanning lines\n\n- one\n- two\n\n"
+              "1. first\n\n---\n\n| A | B |\n|---|--:|\n| a | b |\n")
+        blocks = remy.md_blocks(md)
+        self.assertEqual([b["type"] for b in blocks],
+                         ["para", "para", "para", "para", "para",
+                          "rule", "table"])
+        self.assertEqual(blocks[0]["style"], "TITLE")
+        self.assertEqual(blocks[1]["text"], "Some text spanning lines",
+                         "a wrapped paragraph must be joined")
+        self.assertEqual(blocks[2]["bullet"], "unordered")
+        self.assertEqual(blocks[4]["bullet"], "ordered")
+        self.assertEqual(blocks[6]["rows"], [["A", "B"], ["a", "b"]])
+        self.assertEqual(blocks[6]["aligns"], ["START", "END"])
+
+    def test_style_requests_use_utf16_offsets(self):
+        plain, runs = remy.md_inline("🐀 **fett**")
+        reqs = remy.md_style_requests(10, plain, runs)
+        r = reqs[0]["updateTextStyle"]["range"]
+        self.assertEqual(r["startIndex"], 10 + remy.u16len("🐀 "),
+                         "the rat is astral: offsets must be UTF-16")
+        self.assertEqual(r["endIndex"], r["startIndex"] + 4)
+
+    def test_dry_run_parses_without_credentials(self):
+        import json
+        import tempfile
+        with tempfile.NamedTemporaryFile("w", suffix=".md",
+                                         delete=False) as fh:
+            fh.write("# T\n\ntext\n\n| A |\n|---|\n| x |\n")
+            path = fh.name
+        self.addCleanup(os.unlink, path)
+        args = type("A", (), {"doc": "x" * 30, "file": path,
+                              "dry_run": True, "replace": False,
+                              "key": None})()
+        with quiet() as buf, self.assertRaises(SystemExit) as cm:
+            remy.cmd_md(args)
+        self.assertEqual(cm.exception.code, 0)
+        d = json.loads(buf.getvalue())
+        self.assertTrue(d["dry_run"])
+        self.assertEqual([b["type"] for b in d["blocks"]],
+                         ["para", "para", "table"])
+
+
 # --------------------------------------------------------------- misc
 
 class TestOutline(unittest.TestCase):

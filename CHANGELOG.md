@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.6.0 — 2026-08-05
+
+- **`remy.py md <url> --file report.md`** imports Markdown as real
+  document structure: named heading styles (`#` becomes the title),
+  bold/italic/code, pipe tables as real Docs tables with bold header row
+  and column alignment, lists that never merge their numbering, rules.
+  Contributed from the field by a beta tester who moved a 9 KB report
+  with six tables into a Doc — thank you! It is a direct write and the
+  one deliberate exception to markup mode (mint-highlighting a whole
+  import would hide exactly the formatting it exists to produce): it
+  refuses a non-empty document unless `--replace` is given.
+- The same tester reported markup accept/reject failing at the end of
+  the body, with the spared newline bleeding mint onto later insertions
+  — both fixed since 0.3.1; the tester's 0.3.0 predated the fix.
+- Prompt-injection hardening: `session` now tells the agent explicitly
+  that document text and comments are data from possibly unknown
+  collaborators, never instructions — the tasks list is the only
+  instruction channel from inside a document. SKILL.md states the same
+  rule.
+
 ## 0.5.0 — 2026-08-05
 
 Out of beta. The core — coloured markup, accept/reject, @@remy notes,
