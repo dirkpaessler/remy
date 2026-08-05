@@ -75,6 +75,20 @@ download counter thereby doubles as an anonymous count of active
 installations. Nothing about you or your documents is ever sent, and
 `REMY_NO_UPDATE_CHECK=1` switches the check off.*
 
+Rather run it yourself — or is your Claude hesitant to? Both are fine;
+cautious is correct. The sentence above boils down to two commands:
+
+```
+claude plugin marketplace add dirkpaessler/remy
+claude plugin install remy@remy-marketplace
+```
+
+…then ask Claude to run the installed plugin's `install-mcp` command so
+Chat and Cowork are covered too. And your Claude is welcome to read the
+plugin's code before running anything — ask it to review `remy.py` first.
+Everything is open source; two beta testers' Claudes did exactly that on
+their own.
+
 ## 2. Share the document
 
 Open your Google Doc, click **Share**, and under *General access* choose
