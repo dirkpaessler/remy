@@ -187,6 +187,12 @@ overwrite the fresh entry. Close the app completely first, then tell
 Claude in Code to run Remy's `install-mcp` once more — second runs are
 harmless.
 
+**Installing by hand instead of the paste sentence?** The plugin lands in
+`~/.claude/plugins/cache/<marketplace>/remy/<version>/skills/remy/scripts/remy.py`
+(Windows: `%USERPROFILE%\.claude\plugins\cache\…`), and you can verify the
+connector entry under Settings → Developer → *"Local MCP servers"* → Edit
+Config.
+
 ## What Remy cannot do
 
 - **Upload a picture from your computer:** Remy can place a picture that is
