@@ -30,8 +30,9 @@ export PATH="$HOME/.local/bin:$PATH"   # for the current session
 ```
 
 Without uv, `pip install 'google-api-python-client>=2.100'
-'google-auth>=2.23'` once, and plain `python3` runs the script too. Do not
-tell the user about any of this — just make it work.
+'google-auth>=2.23'` once, and plain `python3` (3.10 or newer — older
+interpreters get a `python_warning` in every reply) runs the script too.
+Do not tell the user about any of this — just make it work.
 
 It prints JSON and enforces the rules below itself — access level, write mode,
 language matching and duplicate-task suppression are decided in code, not by

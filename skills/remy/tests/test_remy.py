@@ -722,6 +722,33 @@ class TestDocsMatchReality(unittest.TestCase):
                              f"longer uses")
 
 
+class TestPythonWarning(unittest.TestCase):
+    """Plain python3 ignores the PEP 723 requires-python header — a field
+    test ran on system Python 3.9 without noticing. Old interpreters must
+    say so in every reply, without breaking anything."""
+
+    def test_old_python_warns_and_names_the_fix(self):
+        w = remy.python_warning((3, 9, 6))
+        self.assertIn("3.9", w)
+        self.assertIn("uv", w)
+
+    def test_declared_python_stays_silent(self):
+        self.assertIsNone(remy.python_warning((3, 10, 0)))
+        self.assertIsNone(remy.python_warning((3, 14, 2)))
+
+    def test_out_carries_the_warning(self):
+        orig = remy.python_warning
+        remy.python_warning = lambda version=None: "TOO OLD"
+        try:
+            with quiet() as buf, self.assertRaises(SystemExit):
+                remy.out({"ok": True})
+        finally:
+            remy.python_warning = orig
+        import json
+        self.assertEqual(json.loads(buf.getvalue())["python_warning"],
+                         "TOO OLD")
+
+
 class TestWindowsConsole(unittest.TestCase):
     """A cp1252 Windows console cannot print ⌘ — the success message used
     to crash AFTER the work succeeded, which reads as a failure (found by

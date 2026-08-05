@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.5-beta — 2026-08-05
+
+- Running under a plain python3 older than 3.10 now says so in every
+  reply: the PEP 723 requires-python header only takes effect under
+  `uv run`, so the second field test ran on system Python 3.9 without
+  anyone noticing. The `python_warning` field names the clean fix (uv
+  brings its own Python). Remy keeps working — a warning, not a gate.
+
 ## 0.4.4-beta — 2026-08-04
 
 Everything in here was found by the first Windows field test — thank you!

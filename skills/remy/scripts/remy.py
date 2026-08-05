@@ -32,7 +32,7 @@ SCOPES = [
     "https://www.googleapis.com/auth/documents",
     "https://www.googleapis.com/auth/drive",
 ]
-VERSION = "0.4.4-beta"  # keep in step with .claude-plugin/plugin.json + CHANGELOG
+VERSION = "0.4.5-beta"  # keep in step with .claude-plugin/plugin.json + CHANGELOG
 # The version file is a GitHub release asset (published by the tag workflow),
 # so GitHub's public download counter doubles as an anonymous tally of active
 # installations — nothing about the user or their documents is ever sent.
@@ -97,7 +97,31 @@ def preview_missing(action="that"):
 
 # ---------------------------------------------------------------- utilities
 
+def python_warning(version=None):
+    """A warning when running below the declared Python, else None.
+
+    The PEP 723 header (requires-python >= 3.10) only takes effect under
+    `uv run`; plain python3 ignores it silently. Found live: a field test
+    ran on system Python 3.9 without anyone noticing. Remy keeps working —
+    this is a warning, not a gate.
+    """
+    v = version or sys.version_info
+    if v >= (3, 10):
+        return None
+    return (f"Running on Python {v[0]}.{v[1]} — below the 3.10 this script "
+            f"declares. Plain python3 ignores the script's Python "
+            f"requirement; only `uv run` enforces it. Things may work, but "
+            f"Google's client libraries no longer test there. The clean "
+            f"fix is uv, which brings its own Python: "
+            f"curl -LsSf https://astral.sh/uv/install.sh | sh  (Windows: "
+            f"powershell -ExecutionPolicy ByPass -c "
+            f"\"irm https://astral.sh/uv/install.ps1 | iex\").")
+
+
 def out(obj, code=0):
+    warn = python_warning()
+    if warn and "python_warning" not in obj:
+        obj = {**obj, "python_warning": warn}
     try:
         print(json.dumps(obj, ensure_ascii=False, indent=2))
     except UnicodeEncodeError:
