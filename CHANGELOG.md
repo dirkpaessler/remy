@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.7.1 — 2026-08-07
+
+- Chat and Cowork catch up with 0.6/0.7: the MCP server gains
+  `import_markdown`, `document_runs`, `rewrite_runs` and
+  `replace_pipe_table`. Their file inputs travel as tool parameters and
+  become temp files only on the local side — the server runs on the
+  user's machine, the agent may live in the cloud, so a file path would
+  point at the wrong side of the bridge. The direct-write tools ask for
+  `user_agreed=True`, mirroring `--direct`.
+
 ## 0.7.0 — 2026-08-07
 
 Second field contribution from the same beta tester — thank you again!

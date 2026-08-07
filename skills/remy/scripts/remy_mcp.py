@@ -25,6 +25,7 @@ import io
 import json
 import os
 import sys
+import tempfile
 from contextlib import redirect_stdout
 
 from mcp.server.mcpserver import MCPServer
@@ -191,6 +192,66 @@ def finish(url: str, summary: str = "", open_items: str = "") -> dict:
     question to put to the user. Pass a summary to sign off in the document."""
     return run(remy.cmd_finish, doc=url, sign_off=bool(summary or open_items),
                summary=summary or None, open_items=open_items or None)
+
+
+def _run_with_temp_file(fn, content, suffix, **kw):
+    """File-taking CLI commands, fed from a parameter.
+
+    The server runs locally, but the agent may live in the cloud — a file
+    path would point at the wrong side of the bridge. So the content
+    travels as a tool parameter and becomes a temp file only here.
+    """
+    fh = tempfile.NamedTemporaryFile("w", suffix=suffix, delete=False,
+                                     encoding="utf-8")
+    try:
+        fh.write(content)
+        fh.close()
+        return run(fn, file=fh.name, **kw)
+    finally:
+        os.unlink(fh.name)
+
+
+@mcp.tool()
+def import_markdown(url: str, markdown: str, replace: bool = False,
+                    dry_run: bool = False) -> dict:
+    """Import Markdown as real document structure: heading styles,
+    bold/italic/code, real Docs tables, lists, rules. A direct write into
+    an EMPTY document; replace=True overwrites a non-empty one and needs
+    the user's explicit consent first."""
+    return _run_with_temp_file(remy.cmd_md, markdown, ".md",
+                               doc=url, replace=replace, dry_run=dry_run)
+
+
+@mcp.tool()
+def document_runs(url: str) -> dict:
+    """Dump every text run (index, text, link, bold, paragraph) — the
+    template for rewrite_runs. Group consecutive runs sharing (paragraph,
+    link, bold) into translatable units before rewriting; raw runs are
+    fragmented by Docs' own edit history."""
+    return run(remy.cmd_runs, doc=url)
+
+
+@mcp.tool()
+def rewrite_runs(url: str, changes: dict, user_agreed: bool = False,
+                 dry_run: bool = False) -> dict:
+    """Replace text runs by index ({index: new text}), keeping character
+    styles and links — the way to translate or re-word a document without
+    losing its links. Direct, unmarked write: ask the user first, then
+    pass user_agreed=True. Batches of ~50 runs per call are fine — runs
+    are processed back to front, so partial progress is safe."""
+    return _run_with_temp_file(remy.cmd_rewrite, json.dumps(changes),
+                               ".json", doc=url, dry_run=dry_run,
+                               direct=user_agreed)
+
+
+@mcp.tool()
+def replace_pipe_table(url: str, nth: int = 1, user_agreed: bool = False,
+                       dry_run: bool = False) -> dict:
+    """Replace the nth Markdown pipe table in the document with a real
+    Docs table (bold header, column alignment). Direct, unmarked write:
+    ask the user first, then pass user_agreed=True."""
+    return run(remy.cmd_table, doc=url, nth=nth, dry_run=dry_run,
+               direct=user_agreed)
 
 
 @mcp.tool()

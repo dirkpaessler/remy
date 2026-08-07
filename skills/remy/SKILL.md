@@ -243,7 +243,9 @@ installations — nothing about the user or their documents is sent.
 
 Claude Code reaches Remy through this skill. Chat and Cowork in the desktop
 app speak MCP instead, and `skills/remy/scripts/remy_mcp.py` exposes the same
-operations as tools. Both read the **app's own connector config** — verified
+operations as tools — including Markdown import, run rewriting and pipe-table
+replacement, whose file inputs travel as tool parameters (the server runs
+locally; a file path would point at the wrong side of the bridge). Both read the **app's own connector config** — verified
 in August 2026: the desktop app does **not** load the plugin's bundled
 `.mcp.json` for Cowork (that file still serves Code sessions and future app
 versions).
