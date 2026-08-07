@@ -32,7 +32,7 @@ SCOPES = [
     "https://www.googleapis.com/auth/documents",
     "https://www.googleapis.com/auth/drive",
 ]
-VERSION = "0.6.0"  # keep in step with .claude-plugin/plugin.json + CHANGELOG
+VERSION = "0.7.0"  # keep in step with .claude-plugin/plugin.json + CHANGELOG
 # The version file is a GitHub release asset (published by the tag workflow),
 # so GitHub's public download counter doubles as an anonymous tally of active
 # installations — nothing about the user or their documents is ever sent.
@@ -833,6 +833,13 @@ def markup_requests(edits):
             if e.get("link"):
                 style["link"] = {"url": e["link"]}
                 fields.append("link")
+            if s == t and not e.get("link"):
+                # Inserted text inherits the PRECEDING character's style,
+                # links included — an insertion after linked text would
+                # come out linked (field report). Clear it; replacements
+                # keep the inheritance deliberately, since their new text
+                # continues the old text's style.
+                fields.append("link")
             if e.get("named_style"):
                 # the inserted block's own paragraph; a leading newline only
                 # ends the paragraph before it and stays unstyled. This MUST
@@ -851,6 +858,11 @@ def markup_requests(edits):
     return requests
 
 
+def unverified_edits(text, edits):
+    """Edits whose inserted text cannot be found in the document. Pure."""
+    return [e for e in edits if e["new"] and e["new"] not in text]
+
+
 def apply_markup(docs, doc_id, edits):
     """Emulate tracked changes with colour. Proposed deletions are struck
     through, never removed; insertions are highlighted."""
@@ -862,8 +874,22 @@ def apply_markup(docs, doc_id, edits):
             documentId=doc_id, body={"requests": requests}).execute()
     except HttpError as err:
         fail("Markup batchUpdate failed", detail=str(err))
+    # `ok` is a promise, so earn it: the API has been seen to accept a
+    # batch and lose content (field report, unreproduced). Read back and
+    # confirm the inserted text actually landed.
+    after = DocText(fetch_document(docs, doc_id))
+    missing = unverified_edits(after.text, edits)
+    if missing:
+        return {
+            "ok": False, "mode": "markup", "edits": len(edits),
+            "error": "The API accepted the batch, but some inserted text "
+                     "cannot be found in the document afterwards.",
+            "missing": [e["new"][:80] for e in missing],
+            "action_required": "Re-run the suggest command for the missing "
+                               "text; the document may have changed "
+                               "concurrently."}
     return {
-        "ok": True, "mode": "markup", "edits": len(edits),
+        "ok": True, "mode": "markup", "edits": len(edits), "verified": True,
         "note": "Changes written into the document as coloured markup: green = "
                 "proposed insertion, red + strikethrough = proposed deletion. "
                 "Nothing was deleted. Resolve with `remy.py markup accept|reject`, "
@@ -1175,8 +1201,27 @@ def cmd_read(args):
          "text": dt.text})
 
 
+def suggest_text_from_file(args, attr):
+    """Resolve --text/--text-file (or --replace/--replace-file) to one value."""
+    path = getattr(args, attr + "_file", None)
+    value = getattr(args, attr, None)
+    if path and value is not None:
+        fail(f"Give --{attr.replace('_', '-')} or "
+             f"--{attr.replace('_', '-')}-file, not both.")
+    if path:
+        with open(path, encoding="utf-8") as fh:
+            setattr(args, attr, fh.read())
+    elif value is None:
+        fail(f"--{attr.replace('_', '-')} (or "
+             f"--{attr.replace('_', '-')}-file) is required.")
+
+
 def cmd_suggest(args):
     doc_id = parse_doc_id(args.doc)
+    if args.action == "replace":
+        suggest_text_from_file(args, "replace")
+    elif args.action == "insert":
+        suggest_text_from_file(args, "text")
     creds = load_credentials(args)
     docs, drive = services(creds)
     dt = DocText(fetch_document(docs, doc_id))
@@ -1618,7 +1663,10 @@ def collect_tasks(dt, comments, document):
     # The tag only counts at the start of a paragraph. Otherwise any sentence
     # that merely mentions @@remy — documentation, or Remy's own report —
     # becomes an instruction, and the skill executes its own examples.
-    for m in re.finditer(r"^[ \t>*-]*" + re.escape(TAG) + r"[ :,-]*(.*?)$",
+    # A single @ counts too: people type @name everywhere else, and a
+    # colleague's "@remy make this a table" went unseen (field report).
+    tag_re = r"@@?remy"
+    for m in re.finditer(r"^[ \t>*-]*" + tag_re + r"[ :,-]*(.*?)$",
                          dt.text, re.IGNORECASE | re.MULTILINE):
         full = dt.text[m.start():m.end()]
         if already_done(full, m.start()):
@@ -1638,7 +1686,7 @@ def collect_tasks(dt, comments, document):
                 or author.get("displayName", "")
                 .endswith(".iam.gserviceaccount.com")):
             continue
-        m = re.search(r"^[ \t>*-]*" + re.escape(TAG) + r"[ :,-]*(.*)",
+        m = re.search(r"^[ \t>*-]*" + tag_re + r"[ :,-]*(.*)",
                       c.get("content", ""),
                       re.IGNORECASE | re.DOTALL | re.MULTILINE)
         if m:
@@ -2652,6 +2700,255 @@ def md_import(docs, doc_id, blocks):
             "rules": sum(1 for b in blocks if b["type"] == "rule")}
 
 
+# -------------------------------------------------- runs, rewrite, table
+#
+# Contributed from the field, second report from the same tester: the
+# "translate this document without losing its links" primitive, and the
+# "make this pipe table a real table" command a collaborator had asked for
+# in an in-document note.
+
+def text_runs(document):
+    """Every text run of the body, in reading order.
+
+    A run is the smallest unit of uniform character style — exactly the
+    boundary where a link, bold or italic starts and ends. Rewriting must
+    work at this level: replacing a whole paragraph at once loses every
+    link in it, and in a factual text those are the sources.
+    """
+    runs = []
+    paragraph = [0]
+
+    def walk(content, in_table=False):
+        for el in content:
+            if "table" in el:
+                for row in el["table"].get("tableRows", []):
+                    for cell in row.get("tableCells", []):
+                        walk(cell.get("content", []), True)
+            p = el.get("paragraph")
+            if not p:
+                continue
+            # Empty paragraphs count too. Skipping them loses the paragraph
+            # boundary, and a rewrite would move text across it (found the
+            # hard way: a byline merged into the first body paragraph).
+            paragraph[0] += 1
+            style = p.get("paragraphStyle", {}).get("namedStyleType",
+                                                    "NORMAL_TEXT")
+            for e in p.get("elements", []):
+                tr = e.get("textRun")
+                if not tr:
+                    continue
+                txt = tr.get("content", "")
+                if txt in ("", "\n"):
+                    continue
+                runs.append({
+                    "i": len(runs),
+                    "start": e["startIndex"], "end": e["endIndex"],
+                    "text": txt, "style": tr.get("textStyle", {}),
+                    "paragraph_style": style, "in_table": in_table,
+                    "paragraph": paragraph[0],
+                })
+    walk(document.get("body", {}).get("content", []))
+    return runs
+
+
+def rewrite_requests(runs, new_texts):
+    """The batch that replaces runs by index, keeping styles. Pure.
+
+    Per run three steps: insert the new text at the run's start, give it
+    the OLD run's character style explicitly, delete the old text. The
+    explicit style step is the whole point — inserted text inherits the
+    style of the PRECEDING character, so without it a link would start one
+    word early or a bold run would bleed into the next sentence.
+
+    Runs are processed back to front. That is not an optimisation: it is
+    what makes a partial failure survivable — the untouched head keeps its
+    indices, and a re-run with a fresh `runs` dump finishes the job.
+
+    Newlines are untouchable. The paragraph-terminating newline belongs to
+    the paragraph, not to the text: deleting it merges paragraphs, and the
+    API refuses some of those deletions outright. So only the text before
+    it is replaced, and a supplied replacement loses its own newlines.
+    """
+    requests = []
+    for i in sorted(new_texts, reverse=True):
+        r = runs[i]
+        old_text = r["text"].rstrip("\n")
+        newlines = len(r["text"]) - len(old_text)
+        text = new_texts[i].rstrip("\n")
+        if text == old_text:
+            continue
+        if text:
+            requests.append({"insertText": {
+                "location": {"index": r["start"]}, "text": text}})
+            requests.append({"updateTextStyle": {
+                "range": {"startIndex": r["start"],
+                          "endIndex": r["start"] + u16len(text)},
+                "textStyle": r["style"],
+                "fields": ",".join(r["style"]) or "bold"}})
+        old_a = r["start"] + u16len(text)
+        old_b = r["end"] + u16len(text) - newlines
+        if old_b > old_a:
+            requests.append({"deleteContentRange": {
+                "range": {"startIndex": old_a, "endIndex": old_b}}})
+    return requests
+
+
+def cmd_runs(args):
+    """Dump text runs — the template for `rewrite`."""
+    doc_id = parse_doc_id(args.doc)
+    creds = load_credentials(args)
+    docs, _ = services(creds)
+    runs = text_runs(fetch_document(docs, doc_id))
+    out({"ok": True, "docId": doc_id, "runs_total": len(runs), "runs": [
+        {"i": r["i"], "text": r["text"],
+         "link": (r["style"].get("link") or {}).get("url"),
+         "bold": bool(r["style"].get("bold")),
+         "paragraph_style": r["paragraph_style"],
+         "in_table": r["in_table"], "paragraph": r["paragraph"]}
+        for r in runs],
+         "note": "Raw runs are fragmented by Docs' own edit history — "
+                 "group consecutive runs sharing (paragraph, link, bold) "
+                 "into translatable units before rewriting."})
+
+
+def cmd_rewrite(args):
+    """Replace text runs with new texts, keeping styles and links.
+
+    Built for translations. A direct, unmarked write: a full-document
+    rewrite as coloured markup would double the text and be unreadable,
+    so it refuses without --direct plus the user's explicit consent.
+    """
+    from googleapiclient.errors import HttpError
+
+    doc_id = parse_doc_id(args.doc)
+    with open(args.file, encoding="utf-8") as fh:
+        new_texts = json.load(fh)
+    if isinstance(new_texts, dict):
+        new_texts = {int(k): v for k, v in new_texts.items()}
+    else:
+        new_texts = {int(x["i"]): x["text"] for x in new_texts}
+
+    creds = load_credentials(args)
+    docs, _ = services(creds)
+    runs = text_runs(fetch_document(docs, doc_id))
+    unknown = [i for i in new_texts if i >= len(runs)]
+    if unknown:
+        fail(f"Run index out of range: {unknown[:5]}",
+             runs_total=len(runs),
+             hint="The document has changed since the `runs` dump — "
+                  "re-run `runs` and rebuild the file against it.")
+
+    if args.dry_run:
+        out({"ok": True, "dry_run": True, "docId": doc_id,
+             "runs_total": len(runs), "runs_changed": len(new_texts),
+             "sample": [{"i": i, "old": runs[i]["text"][:60],
+                         "new": new_texts[i][:60]}
+                        for i in sorted(new_texts)[:5]],
+             "note": "Nothing was written."})
+    if not args.direct:
+        fail("A full-document rewrite cannot be shown as coloured markup — "
+             "it would double the text.",
+             hint="Re-run with --direct once the user has agreed; undo is "
+                  "through the document's version history.")
+
+    requests = rewrite_requests(runs, new_texts)
+    if not requests:
+        out({"ok": True, "docId": doc_id, "runs_changed": 0,
+             "note": "Nothing to do."})
+    try:
+        for i in range(0, len(requests), 300):
+            docs.documents().batchUpdate(
+                documentId=doc_id,
+                body={"requests": requests[i:i + 300]}).execute()
+    except HttpError as err:
+        fail("Rewrite failed", detail=str(err), runs_total=len(runs),
+             hint="The document may be partially rewritten. Runs were "
+                  "processed back to front, so the untouched head kept its "
+                  "indices: re-run `runs` and rewrite the remainder.")
+    out({"ok": True, "mode": "direct", "docId": doc_id,
+         "runs_total": len(runs), "runs_changed": len(new_texts),
+         "note": "Runs replaced, character styles and links preserved. "
+                 "Direct, unmarked write — undo through version history."})
+
+
+def pipe_table_blocks(text):
+    """Contiguous runs of |-lines as (py_start, py_end, lines) blocks. Pure."""
+    lines = text.split("\n")
+    blocks, run, start, pos = [], [], 0, 0
+    for line in lines:
+        if line.strip().startswith("|"):
+            if not run:
+                start = pos
+            run.append(line)
+        else:
+            if len(run) >= 2:
+                blocks.append((start, pos - 1, list(run)))
+            run = []
+        pos += len(line) + 1
+    if len(run) >= 2:
+        blocks.append((start, pos - 1, list(run)))
+    return blocks
+
+
+def cmd_table(args):
+    """Replace one Markdown pipe table in the document with a real table.
+
+    The commonest case in collaboratively written documents: somebody left
+    a table as pipe lines. `md` only handles whole documents; this hits a
+    single block. Necessarily a direct write — a table structure cannot be
+    shown as coloured markup — so it refuses without --direct.
+    """
+    from googleapiclient.errors import HttpError
+
+    doc_id = parse_doc_id(args.doc)
+    creds = load_credentials(args)
+    docs, _ = services(creds)
+    dt = DocText(fetch_document(docs, doc_id))
+
+    blocks = pipe_table_blocks(dt.text)
+    if not blocks:
+        fail("No Markdown table found in this document.")
+    n = (args.nth or 1) - 1
+    if n >= len(blocks):
+        fail(f"Only {len(blocks)} Markdown table(s) found.",
+             hint="Use --nth within that range.")
+    a, b, raw_lines = blocks[n]
+
+    tables = [x for x in md_blocks("\n".join(raw_lines))
+              if x["type"] == "table"]
+    if not tables:
+        fail("The pipe lines could not be parsed as a table.")
+    tab = tables[0]
+
+    if args.dry_run:
+        out({"ok": True, "dry_run": True, "docId": doc_id,
+             "tables_found": len(blocks), "using": n + 1,
+             "rows": len(tab["rows"]), "columns": len(tab["rows"][0]),
+             "preview": tab["rows"][:3], "note": "Nothing was written."})
+    if not args.direct:
+        fail("Replacing pipe lines with a real table is a structural edit "
+             "and cannot be shown as coloured markup.",
+             hint="Re-run with --direct once the user has agreed; undo is "
+                  "through the document's version history.")
+
+    i0, i1 = dt.doc_index(a), dt.doc_index(b)
+    try:
+        docs.documents().batchUpdate(documentId=doc_id, body={"requests": [
+            {"deleteContentRange": {"range": {"startIndex": i0,
+                                              "endIndex": i1}}}]}).execute()
+        docs.documents().batchUpdate(documentId=doc_id, body={"requests": [
+            {"insertTable": {"location": {"index": i0},
+                             "rows": len(tab["rows"]),
+                             "columns": len(tab["rows"][0])}}]}).execute()
+    except HttpError as err:
+        fail("Table replacement failed", detail=str(err))
+    md_fill_table(docs, doc_id, i0, tab)
+    out({"ok": True, "mode": "direct", "docId": doc_id, "title": dt.title,
+         "rows": len(tab["rows"]), "columns": len(tab["rows"][0]),
+         "note": "Pipe lines replaced by a real table. Direct, unmarked "
+                 "write — undo through the document's version history."})
+
+
 def cmd_md(args):
     """Import a Markdown file as formatted content into an empty document.
 
@@ -2729,13 +3026,19 @@ def main():
     r = ssub.add_parser("replace")
     r.add_argument("doc")
     r.add_argument("--find", required=True)
-    r.add_argument("--replace", required=True)
+    r.add_argument("--replace")
+    r.add_argument("--replace-file",
+                   help="read the replacement text from this file (avoids "
+                        "shell-quoting long texts)")
     d = ssub.add_parser("delete")
     d.add_argument("doc")
     d.add_argument("--find", required=True)
     i = ssub.add_parser("insert")
     i.add_argument("doc")
-    i.add_argument("--text", required=True)
+    i.add_argument("--text")
+    i.add_argument("--text-file",
+                   help="read the text from this file (avoids shell-quoting "
+                        "long texts)")
     g = i.add_mutually_exclusive_group(required=True)
     g.add_argument("--after", help="anchor text; insert right after it")
     g.add_argument("--before", help="anchor text; insert right before it")
@@ -2896,6 +3199,31 @@ def main():
                    help="show what would be written, change nothing")
     s.add_argument("--remove", action="store_true", help="unregister again")
     s.set_defaults(func=cmd_install_mcp)
+
+    s = sub.add_parser("runs", help="dump text runs (the template for "
+                                    "rewrite)")
+    s.add_argument("doc")
+    s.set_defaults(func=cmd_runs)
+
+    s = sub.add_parser("rewrite", help="replace text runs, keeping styles "
+                                       "and links (for translations)")
+    s.add_argument("doc")
+    s.add_argument("--file", required=True,
+                   help="JSON: {run index: new text} or [{i, text}, ...]")
+    s.add_argument("--dry-run", action="store_true")
+    s.add_argument("--direct", action="store_true",
+                   help="required: a rewrite cannot be shown as markup")
+    s.set_defaults(func=cmd_rewrite)
+
+    s = sub.add_parser("table", help="replace a Markdown pipe table with a "
+                                     "real Docs table")
+    s.add_argument("doc")
+    s.add_argument("--nth", type=int,
+                   help="which pipe table in the document (1-based)")
+    s.add_argument("--dry-run", action="store_true")
+    s.add_argument("--direct", action="store_true",
+                   help="required: this edit cannot be shown as markup")
+    s.set_defaults(func=cmd_table)
 
     s = sub.add_parser("md", help="import a Markdown file as formatted "
                                   "content (headings, emphasis, real tables)")

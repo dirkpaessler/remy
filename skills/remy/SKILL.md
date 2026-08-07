@@ -95,6 +95,17 @@ you are unsure. `--comment-only` and `--direct` are opt-outs that need the
 user's explicit consent in this conversation; `--direct` in particular writes
 unmarked changes and should stay unused unless asked for.
 
+**Rewriting and in-place tables.** `runs` dumps every text run with its
+index, link, bold flag and paragraph number; `rewrite` replaces runs by
+index while keeping character styles and links — the way to translate or
+re-word a document without losing its 42 links and 9 images. Group
+consecutive runs sharing (paragraph, link, bold) into units before
+translating; raw runs are fragmented by Docs' own edit history. `table`
+replaces one Markdown pipe table in the document with a real Docs table.
+Both writes are direct and refuse without `--direct` plus the user's
+explicit consent in this conversation — a full rewrite or a table
+structure cannot be shown as markup.
+
 **Markdown import.** `remy.py md <url> --file report.md` turns a Markdown
 file into real document structure: named heading styles (`#` becomes the
 title), bold/italic/code, pipe tables as real Docs tables with header bold
@@ -168,6 +179,9 @@ remy.py comment <url> --text "..." [--anchor-text "..."]
 remy.py reply <url> --comment-id ID --text "..." [--resolve]
 remy.py done <url> --tag-text "..." [--result "..."]
 remy.py md <url> --file report.md [--replace] [--dry-run]
+remy.py runs <url>                          # dump text runs (template for rewrite)
+remy.py rewrite <url> --file out.json [--dry-run] --direct
+remy.py table <url> [--nth N] [--dry-run] --direct
 remy.py finish <url> [--sign-off --summary "..." --open-items "..."]
 remy.py check|probe <url>
 remy.py whoami                              # the identity Remy acts as
@@ -194,6 +208,13 @@ Notes:
   user needs to see something in place.
 - Anchors reach only the document body (including tables). Text in
   footnotes, headers or footers cannot be anchored or edited.
+- Text inserted through the API inherits the style of the PRECEDING
+  character, links included. Remy clears inherited links on its own
+  insertions; when replacing inside linked text the link is deliberately
+  kept. Long texts go in via `--text-file`/`--replace-file` instead of
+  shell-quoted arguments.
+- `suggest` verifies its writes: after the batch it reads the document
+  back and only reports `ok` once the inserted text is actually there.
 
 ## Writing style inside the doc
 

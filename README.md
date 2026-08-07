@@ -157,7 +157,8 @@ more!).
 ## 6. Leaving notes for Remy inside the document
 
 Anyone working on the document can leave Remy an instruction without opening
-Claude at all: start a line, or a comment, with the tag `@@remy`. A line in
+Claude at all: start a line, or a comment, with the tag `@@remy` (a single
+`@remy` works too). A line in
 the text that reads `"@@remy translate this paragraph into German"`, or a
 comment saying `"@@remy make this section shorter"`, is an instruction Remy
 will find.
@@ -289,7 +290,7 @@ See [`SKILL.md`](skills/remy/SKILL.md) for the command reference and
 python3 skills/remy/tests/test_remy.py
 ```
 
-77 tests, no network, no credentials, no dependencies. They cover what is
+84 tests, no network, no credentials, no dependencies. They cover what is
 expensive to get wrong: that `remy.py` carries no preview API surface,
 UTF-16 index arithmetic, anchor disambiguation, the language guard, that the
 markup colours collide with none of the 81 swatches in the Google Docs

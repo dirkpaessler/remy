@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.7.0 — 2026-08-07
+
+Second field contribution from the same beta tester — thank you again!
+
+- **`remy.py runs` + `remy.py rewrite`**: the translation primitive.
+  `runs` dumps every text run (index, link, bold, paragraph); `rewrite`
+  replaces runs by index while explicitly re-applying the old character
+  style — because inserted text inherits the PRECEDING character's
+  style, links included, a 23 000-character document survives
+  translation with all 42 links and 9 images intact. Runs are processed
+  back to front, which is what makes a partial batch failure survivable.
+- **`remy.py table`** replaces one Markdown pipe table in the document
+  with a real Docs table (bold header, column alignment) — the
+  "@remy make this a proper table" case.
+- Both are direct writes and refuse without `--direct` plus the user's
+  explicit consent; a rewrite or a table structure cannot be shown as
+  markup.
+- **`suggest` now verifies its writes**: after the batch it reads the
+  document back and reports `ok` only once the inserted text is actually
+  present (the tester saw one silent loss; `ok` is a promise, so it is
+  now earned).
+- **Inherited links fixed**: an insertion after linked text no longer
+  comes out linked; replacements inside linked text keep the link
+  deliberately.
+- **`@remy` with a single `@` is now found** — people type @name
+  everywhere else, and a colleague's note went unseen.
+- **`--text-file` / `--replace-file`** on `suggest` for long texts,
+  instead of fighting shell quoting.
+
 ## 0.6.0 — 2026-08-05
 
 - **`remy.py md <url> --file report.md`** imports Markdown as real

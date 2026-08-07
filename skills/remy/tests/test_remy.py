@@ -670,6 +670,74 @@ class TestMarkdownImport(unittest.TestCase):
                          ["para", "para", "table"])
 
 
+# --------------------------------------------------------------- runs & rewrite
+
+class TestRunsAndRewrite(unittest.TestCase):
+    """The translation primitive from the second field report: replace text
+    runs while keeping character styles and links."""
+
+    def test_empty_paragraphs_keep_their_boundary(self):
+        doc = document("A\n", "\n", "B\n")
+        runs = remy.text_runs(doc)
+        self.assertEqual([r["text"] for r in runs], ["A\n", "B\n"])
+        self.assertEqual([r["paragraph"] for r in runs], [1, 3],
+                         "the empty paragraph must still be counted, or a "
+                         "rewrite moves text across the boundary")
+
+    def test_rewrite_keeps_style_and_spares_the_newline(self):
+        runs = [{"i": 0, "start": 1, "end": 7, "text": "Hello\n",
+                 "style": {"bold": True}}]
+        reqs = remy.rewrite_requests(runs, {0: "Servus"})
+        self.assertEqual([next(iter(r)) for r in reqs],
+                         ["insertText", "updateTextStyle",
+                          "deleteContentRange"])
+        st = reqs[1]["updateTextStyle"]
+        self.assertEqual(st["textStyle"], {"bold": True},
+                         "the OLD style must be applied explicitly — "
+                         "inserted text inherits the preceding character")
+        dr = reqs[2]["deleteContentRange"]["range"]
+        self.assertEqual((dr["startIndex"], dr["endIndex"]), (7, 12),
+                         "the paragraph's newline must survive the delete")
+
+    def test_rewrite_skips_unchanged_runs(self):
+        runs = [{"i": 0, "start": 1, "end": 7, "text": "Hello\n",
+                 "style": {}}]
+        self.assertEqual(remy.rewrite_requests(runs, {0: "Hello"}), [])
+
+    def test_pipe_table_blocks_finds_contiguous_runs(self):
+        text = "before\n| A | B |\n|---|---|\n| a | b |\nafter\n| x |\n"
+        blocks = remy.pipe_table_blocks(text)
+        self.assertEqual(len(blocks), 1, "a single pipe line is no table")
+        a, b, lines = blocks[0]
+        self.assertEqual(text[a:b], "| A | B |\n|---|---|\n| a | b |")
+
+    def test_verification_spots_a_lost_insertion(self):
+        edits = [{"old": "", "new": "landed"}, {"old": "", "new": "lost"}]
+        missing = remy.unverified_edits("…text with landed in it…", edits)
+        self.assertEqual([e["new"] for e in missing], ["lost"])
+
+    def test_pure_insertions_clear_the_inherited_link(self):
+        reqs = remy.markup_requests([{"doc_range": (5, 5), "old": "",
+                                      "new": "add"}])
+        st = reqs[1]["updateTextStyle"]
+        self.assertIn("link", st["fields"],
+                      "an insertion after linked text must not come out "
+                      "linked")
+        self.assertNotIn("link", st["textStyle"])
+        reqs = remy.markup_requests([{"doc_range": (5, 8), "old": "old",
+                                      "new": "new"}])
+        self.assertNotIn("link", reqs[2]["updateTextStyle"]["fields"],
+                         "a replacement continues the old text's style, "
+                         "link included")
+
+    def test_single_at_remy_tag_is_found(self):
+        found, _ = remy.collect_tasks(
+            remy.DocText(document("@remy make this a proper table\n")),
+            [], document("@remy make this a proper table\n"))
+        self.assertEqual(len(found), 1)
+        self.assertEqual(found[0]["command"], "make this a proper table")
+
+
 # --------------------------------------------------------------- misc
 
 class TestOutline(unittest.TestCase):
